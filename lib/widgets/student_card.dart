@@ -43,7 +43,9 @@ class StudentCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _getBorderColor(colors)),
+            border: Border.all(
+              color: _getBorderColor(colors),
+            ),
             boxShadow: [
               BoxShadow(
                 color: colors.shadow.withValues(alpha: 0.025),
@@ -56,7 +58,9 @@ class StudentCard extends StatelessWidget {
             children: [
               _buildAvatar(colors),
               const SizedBox(width: 12),
-              Expanded(child: _buildContent(colors)),
+              Expanded(
+                child: _buildContent(colors),
+              ),
               const SizedBox(width: 6),
               _buildTrailing(colors),
             ],
@@ -110,6 +114,12 @@ class StudentCard extends StatelessWidget {
   }
 
   Widget _buildContent(ColorScheme colors) {
+    // الـ Schedule هو المصدر الأساسي للـ Grade.
+    // student.grade موجود كـ fallback للبيانات القديمة.
+    final grade = schedule?.grade.trim().isNotEmpty == true
+        ? schedule!.grade
+        : student.grade;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -126,16 +136,17 @@ class StudentCard extends StatelessWidget {
 
         const SizedBox(height: 4),
 
-        Text(
-          student.grade,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: colors.onSurfaceVariant,
+        if (grade.trim().isNotEmpty)
+          Text(
+            grade,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: colors.onSurfaceVariant,
+            ),
           ),
-        ),
 
         if (schedule != null) ...[
           const SizedBox(height: 8),
@@ -144,7 +155,11 @@ class StudentCard extends StatelessWidget {
 
         if (student.phone.isNotEmpty) ...[
           const SizedBox(height: 7),
-          _buildMeta(colors, Icons.phone_outlined, student.phone),
+          _buildMeta(
+            colors,
+            Icons.phone_outlined,
+            student.phone,
+          ),
         ],
 
         if (attendanceRate != null) ...[
@@ -164,7 +179,10 @@ class StudentCard extends StatelessWidget {
 
   Widget _buildScheduleInfo(ColorScheme colors) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 8,
+      ),
       decoration: BoxDecoration(
         color: _getScheduleBackground(colors),
         borderRadius: BorderRadius.circular(12),
@@ -222,6 +240,32 @@ class StudentCard extends StatelessWidget {
             ],
           ),
 
+          const SizedBox(height: 5),
+
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.menu_book_outlined,
+                size: 12,
+                color: _getScheduleColor(colors),
+              ),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  schedule!.lessonTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
           if (classStatus != null) ...[
             const SizedBox(height: 6),
             _buildClassStatus(colors),
@@ -257,7 +301,10 @@ class StudentCard extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 7,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
@@ -265,7 +312,11 @@ class StudentCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: color),
+          Icon(
+            icon,
+            size: 11,
+            color: color,
+          ),
           const SizedBox(width: 4),
           Text(
             text,
@@ -304,11 +355,19 @@ class StudentCard extends StatelessWidget {
     return colors.primary;
   }
 
-  Widget _buildMeta(ColorScheme colors, IconData icon, String text) {
+  Widget _buildMeta(
+      ColorScheme colors,
+      IconData icon,
+      String text,
+      ) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: colors.primary),
+        Icon(
+          icon,
+          size: 12,
+          color: colors.primary,
+        ),
         const SizedBox(width: 4),
         Flexible(
           child: Text(
@@ -331,7 +390,10 @@ class StudentCard extends StatelessWidget {
       return PopupMenuButton<String>(
         padding: EdgeInsets.zero,
         tooltip: 'خيارات الطالب',
-        icon: Icon(Icons.more_vert_rounded, color: colors.onSurfaceVariant),
+        icon: Icon(
+          Icons.more_vert_rounded,
+          color: colors.onSurfaceVariant,
+        ),
         onSelected: (value) {
           if (value == 'edit') {
             onEdit?.call();
@@ -344,7 +406,10 @@ class StudentCard extends StatelessWidget {
             value: 'edit',
             child: Row(
               children: [
-                Icon(Icons.edit_outlined, size: 18),
+                Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                ),
                 SizedBox(width: 10),
                 Text('تعديل'),
               ],

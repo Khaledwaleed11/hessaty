@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 
 import '../models/attendance_model.dart';
 import '../models/class_schedule_model.dart';
 import '../models/group_model.dart';
 import '../models/student_model.dart';
+import '../services/attendance_pdf_service.dart';
 import '../services/attendance_service.dart';
 import '../services/group_service.dart';
 import '../services/schedule_service.dart';
@@ -38,6 +40,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
   _DateFilter _dateFilter = _DateFilter.all;
 
   String? _selectedGroupId;
+  String? _selectedScheduleId;
 
   @override
   void initState() {
@@ -119,6 +122,439 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     }
 
     return null;
+  }
+
+  Future<void> _exportAttendancePdf() async {
+    if (_selectedGroupId == null || _selectedGroupId!.isEmpty) {
+      _showMessage('اختر مجموعة أولًا لتصدير التقرير.');
+      return;
+    }
+
+    if (_selectedScheduleId == null || _selectedScheduleId!.isEmpty) {
+      _showMessage('اختر حصة أولًا لتصدير التقرير.');
+      return;
+    }
+
+    final schedule = _getSchedule(_selectedScheduleId!);
+
+    if (schedule == null) {
+      _showMessage('تعذر العثور على بيانات الحصة.');
+      return;
+    }
+
+    final group = _getGroup(schedule.groupId);
+
+    if (group == null) {
+      _showMessage('تعذر العثور على المجموعة المرتبطة بهذه الحصة.');
+      return;
+    }
+
+    // ============================================================
+    // 1) سجلات الحضور الخاصة بالحصة
+    // ============================================================
+
+    final scheduleRecords = _records
+        .where((record) => record.scheduleId == schedule.id)
+        .toList();
+
+    // ============================================================
+    // 2) تحديد تاريخ الجلسة
+    //
+    // لو فيه Attendance records:
+    // نستخدم آخر تاريخ مسجل.
+    //
+    // لو مفيش:
+    // نستخدم تاريخ اليوم.
+    // ============================================================
+
+    DateTime selectedDate;
+
+    if (scheduleRecords.isNotEmpty) {
+      scheduleRecords.sort(
+            (a, b) => b.date.compareTo(a.date),
+      );
+
+      selectedDate = DateTime(
+        scheduleRecords.first.date.year,
+        scheduleRecords.first.date.month,
+        scheduleRecords.first.date.day,
+      );
+    } else {
+      final now = DateTime.now();
+
+      selectedDate = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      );
+    }
+
+    // ============================================================
+    // 3) جلب الطلاب المرتبطين بالحصة
+    // ============================================================
+
+    List<StudentModel> students = _students
+        .where(
+          (student) =>
+      student.scheduleId == schedule.id &&
+          !student.registrationDate.isAfter(selectedDate),
+    )
+        .toList();
+
+    // ============================================================
+    // Fallback للبيانات القديمة
+    // ============================================================
+
+    if (students.isEmpty) {
+      students = _students
+          .where(
+            (student) =>
+        student.groupId == schedule.groupId &&
+            !student.registrationDate.isAfter(selectedDate),
+      )
+          .toList();
+    }
+
+    // ============================================================
+    // Fallback أخير:
+    // الطلاب الموجودين في Attendance
+    // ============================================================
+
+    if (students.isEmpty && scheduleRecords.isNotEmpty) {
+      final studentIds = scheduleRecords
+          .map((record) => record.studentId)
+          .toSet();
+
+      students = _students
+          .where(
+            (student) => studentIds.contains(student.id),
+      )
+          .toList();
+    }
+
+    if (students.isEmpty) {
+      _showMessage(
+        'لم يتم العثور على طلاب مرتبطين بهذه الحصة.\n'
+            'تأكد من تسجيل الطلاب في المجموعة أو الحصة.',
+      );
+      return;
+    }
+
+    // ============================================================
+    // ترتيب الطلاب
+    // ============================================================
+
+    students.sort(
+          (a, b) => a.name.toLowerCase().compareTo(
+        b.name.toLowerCase(),
+      ),
+    );
+
+    // ============================================================
+    // 4) Attendance records الخاصة بالجلسة المحددة
+    // ============================================================
+
+    final actualRecords = scheduleRecords.where(
+          (record) {
+        return _isSameDay(
+          record.date,
+          selectedDate,
+        );
+      },
+    ).toList();
+
+    // ============================================================
+    // 5) تكوين سجل كامل لكل الطلاب
+    //
+    // عنده Attendance => نستخدمه
+    // مفيش Attendance => غائب
+    // ============================================================
+
+    final completeSessionRecords = <AttendanceModel>[];
+
+    for (final student in students) {
+      AttendanceModel? existingRecord;
+
+      for (final record in actualRecords) {
+        if (record.studentId == student.id) {
+          existingRecord = record;
+          break;
+        }
+      }
+
+      if (existingRecord != null) {
+        completeSessionRecords.add(existingRecord);
+      } else {
+        completeSessionRecords.add(
+          AttendanceModel(
+            id:
+            '${schedule.id}_${student.id}_'
+                '${selectedDate.year}_'
+                '${selectedDate.month}_'
+                '${selectedDate.day}',
+            studentId: student.id,
+            scheduleId: schedule.id,
+            date: selectedDate,
+            isPresent: false,
+          ),
+        );
+      }
+    }
+
+    // ============================================================
+    // 6) إنشاء PDF
+    // ============================================================
+
+    try {
+      _showLoadingDialog();
+
+      final pdfBytes =
+      await AttendancePdfService.generateAttendanceReport(
+        group: group,
+        schedule: schedule,
+        students: students,
+        records: completeSessionRecords,
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename:
+        'attendance_${_sanitizeFileName(schedule.lessonTitle)}.pdf',
+      );
+    } catch (e, stackTrace) {
+      debugPrint('PDF ERROR: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        Navigator.of(context).pop();
+
+        _showMessage(
+          'حدث خطأ أثناء إنشاء ملف PDF:\n$e',
+        );
+      }
+    }
+  }  List<DateTime> _getAvailableSessionDates(String scheduleId) {
+    final dates = <DateTime>{};
+
+    for (final record in _records) {
+      if (record.scheduleId != scheduleId) {
+        continue;
+      }
+
+      dates.add(DateTime(record.date.year, record.date.month, record.date.day));
+    }
+
+    final result = dates.toList();
+
+    result.sort((a, b) => b.compareTo(a));
+
+    return result;
+  }
+
+  Future<DateTime?> _showSessionDatePicker(
+    ClassScheduleModel schedule,
+    List<DateTime> dates,
+  ) async {
+    final colors = Theme.of(context).colorScheme;
+
+    return showModalBottomSheet<DateTime>(
+      context: context,
+      backgroundColor: colors.surface,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'اختيار تاريخ التقرير',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: colors.onSurface,
+                  ),
+                ),
+
+                const SizedBox(height: 5),
+
+                Text(
+                  '${schedule.lessonTitle} • ${schedule.startTime} - ${schedule.endTime}',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: dates.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final date = dates[index];
+
+                      return Material(
+                        color: colors.surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(context, date);
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 13,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: colors.outlineVariant.withValues(
+                                  alpha: 0.25,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: colors.primary.withValues(
+                                      alpha: 0.09,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.calendar_month_rounded,
+                                    color: colors.primary,
+                                    size: 20,
+                                  ),
+                                ),
+
+                                const SizedBox(width: 11),
+
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _formatDate(date),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w900,
+                                          color: colors.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'تقرير حضور وغياب الحصة',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600,
+                                          color: colors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 12,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showLoadingDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final colors = Theme.of(context).colorScheme;
+
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+            ),
+            content: Row(
+              children: [
+                CircularProgressIndicator(color: colors.primary),
+                const SizedBox(width: 18),
+                const Expanded(
+                  child: Text(
+                    'جاري إنشاء تقرير PDF...',
+                    textDirection: TextDirection.rtl,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _sanitizeFileName(String value) {
+    return value
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
+  }
+
+  String _formatFileDate(DateTime date) {
+    return '${date.year}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  int _getGroupSchedulesCount(String groupId) {
+    return _schedules.where((schedule) => schedule.groupId == groupId).length;
   }
 
   List<AttendanceModel> _buildCompleteRecords() {
@@ -221,7 +657,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         final matchesSearch =
             student.name.toLowerCase().contains(query) ||
             student.phone.toLowerCase().contains(query) ||
-            student.parentPhone.toLowerCase().contains(query);
+            student.parentPhone.toLowerCase().contains(query) ||
+            student.grade.toLowerCase().contains(query);
 
         if (!matchesSearch) {
           return false;
@@ -239,6 +676,11 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       if (_selectedGroupId != null &&
           _selectedGroupId!.isNotEmpty &&
           student.groupId != _selectedGroupId) {
+        return false;
+      }
+      if (_selectedScheduleId != null &&
+          _selectedScheduleId!.isNotEmpty &&
+          record.scheduleId != _selectedScheduleId) {
         return false;
       }
 
@@ -312,6 +754,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       _attendanceFilter = _AttendanceFilter.all;
       _dateFilter = _DateFilter.all;
       _selectedGroupId = null;
+      _selectedScheduleId = null;
     });
   }
 
@@ -411,6 +854,8 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
 
     final colors = Theme.of(context).colorScheme;
 
+    final studentSchedule = _getSchedule(student.scheduleId);
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -465,7 +910,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                student.grade,
+                                studentSchedule?.grade ?? student.grade,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -891,7 +1336,363 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         const SizedBox(height: 9),
 
         _buildGroupSelector(colors),
+        const SizedBox(height: 16),
+
+        _buildFilterLabel(
+          colors,
+          icon: Icons.menu_book_rounded,
+          title: 'الحصة',
+          value: _selectedScheduleId == null
+              ? 'كل الحصص'
+              : (_getSchedule(_selectedScheduleId!)?.lessonTitle ?? 'الحصة'),
+        ),
+
+        const SizedBox(height: 9),
+
+        _buildScheduleSelector(colors),
       ],
+    );
+  }
+
+  Widget _buildScheduleSelector(ColorScheme colors) {
+    final schedules = _selectedGroupId == null
+        ? <ClassScheduleModel>[]
+        : _schedules
+              .where((schedule) => schedule.groupId == _selectedGroupId)
+              .toList();
+
+    schedules.sort(
+      (a, b) =>
+          _timeToMinutes(a.startTime).compareTo(_timeToMinutes(b.startTime)),
+    );
+
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(17),
+      child: InkWell(
+        onTap: _selectedGroupId == null
+            ? null
+            : () => _showSchedulePicker(schedules),
+        borderRadius: BorderRadius.circular(17),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(
+              color: _selectedScheduleId != null
+                  ? colors.primary.withValues(alpha: 0.38)
+                  : colors.outlineVariant.withValues(alpha: 0.30),
+            ),
+            color: _selectedScheduleId != null
+                ? colors.primary.withValues(alpha: 0.035)
+                : colors.surface,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: 0.09),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.menu_book_rounded,
+                  size: 19,
+                  color: colors.primary,
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectedGroupId == null
+                          ? 'اختر مجموعة أولًا'
+                          : _selectedScheduleId == null
+                          ? 'كل الحصص'
+                          : (_getSchedule(_selectedScheduleId!)?.lessonTitle ??
+                                'حصة غير محددة'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: colors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _selectedGroupId == null
+                          ? 'اختر مجموعة لعرض حصصها'
+                          : _selectedScheduleId == null
+                          ? '${schedules.length} حصة في المجموعة'
+                          : _getSchedule(_selectedScheduleId!)?.grade ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              if (_selectedScheduleId != null)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'إلغاء اختيار الحصة',
+                  onPressed: () {
+                    setState(() {
+                      _selectedScheduleId = null;
+                    });
+                  },
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: _selectedGroupId == null
+                    ? colors.onSurfaceVariant.withValues(alpha: 0.4)
+                    : colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  int _timeToMinutes(String time) {
+    final cleaned = time.trim().toUpperCase();
+
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM|ص|م)?$',
+    ).firstMatch(cleaned);
+
+    if (match == null) {
+      return 0;
+    }
+
+    var hour = int.tryParse(match.group(1) ?? '') ?? 0;
+    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    final period = match.group(3);
+
+    if ((period == 'AM' || period == 'ص') && hour == 12) {
+      hour = 0;
+    }
+
+    if ((period == 'PM' || period == 'م') && hour != 12) {
+      hour += 12;
+    }
+
+    return hour * 60 + minute;
+  }
+
+  Future<void> _showSchedulePicker(List<ClassScheduleModel> schedules) async {
+    final colors = Theme.of(context).colorScheme;
+
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: colors.surface,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'اختيار الحصة',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: colors.onSurface,
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                Text(
+                  'اختر حصة لعرض سجلات الحضور الخاصة بها.',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                _buildScheduleOption(
+                  context,
+                  colors,
+                  title: 'كل الحصص',
+                  subtitle: 'عرض جميع حصص المجموعة',
+                  icon: Icons.grid_view_rounded,
+                  selected: _selectedScheduleId == null,
+                  onTap: () {
+                    Navigator.pop(context, null);
+                  },
+                ),
+
+                if (schedules.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: schedules.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final schedule = schedules[index];
+
+                        return _buildScheduleOption(
+                          context,
+                          colors,
+                          title: schedule.lessonTitle,
+                          subtitle:
+                              '${schedule.grade} • ${schedule.startTime} - ${schedule.endTime}',
+                          icon: Icons.menu_book_rounded,
+                          selected: _selectedScheduleId == schedule.id,
+                          onTap: () {
+                            Navigator.pop(context, schedule.id);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (selected != null || _selectedScheduleId != null) {
+      setState(() {
+        _selectedScheduleId = selected;
+      });
+    }
+  }
+
+  Widget _buildScheduleOption(
+    BuildContext context,
+    ColorScheme colors, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected
+          ? colors.primary.withValues(alpha: 0.08)
+          : colors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected
+                  ? colors.primary.withValues(alpha: 0.28)
+                  : colors.outlineVariant.withValues(alpha: 0.22),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? colors.primary
+                      : colors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  size: 19,
+                  color: selected ? colors.onPrimary : colors.primary,
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: colors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              if (selected)
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 20,
+                  color: colors.primary,
+                )
+              else
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 11,
+                  color: colors.onSurfaceVariant,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1147,8 +1948,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                     Text(
                       _selectedGroupId == null
                           ? 'اعرض سجلات جميع المجموعات'
-                          : (_getGroup(_selectedGroupId!)?.grade ??
-                                'بيانات المجموعة'),
+                          : '${_getGroupSchedulesCount(_selectedGroupId!)} حصة مرتبطة بالمجموعة',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1253,12 +2053,13 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final group = _groups[index];
+                      final schedulesCount = _getGroupSchedulesCount(group.id);
 
                       return _buildGroupOption(
                         context,
                         colors,
                         title: group.name,
-                        subtitle: group.grade,
+                        subtitle: '$schedulesCount حصة مرتبطة بالمجموعة',
                         icon: Icons.groups_rounded,
                         selected: _selectedGroupId == group.id,
                         onTap: () {
@@ -1282,6 +2083,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     if (selected != null || _selectedGroupId != null) {
       setState(() {
         _selectedGroupId = selected;
+        _selectedScheduleId = null;
       });
     }
   }
@@ -1398,6 +2200,12 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
 
     final group = _getGroup(student.groupId);
 
+    // الـ Schedule هو المصدر الأساسي للـ Grade.
+    // student.grade مجرد fallback للبيانات القديمة.
+    final grade = schedule?.grade.trim().isNotEmpty == true
+        ? schedule!.grade
+        : student.grade;
+
     return Material(
       color: colors.surface,
       borderRadius: BorderRadius.circular(20),
@@ -1480,11 +2288,16 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                       children: [
                         if (group != null)
                           _buildMeta(colors, Icons.groups_outlined, group.name),
+
+                        if (grade.trim().isNotEmpty)
+                          _buildMeta(colors, Icons.school_outlined, grade),
+
                         _buildMeta(
                           colors,
                           Icons.calendar_today_outlined,
                           _formatDate(record.date),
                         ),
+
                         if (schedule != null)
                           _buildMeta(
                             colors,
@@ -1592,6 +2405,11 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         ),
         actions: [
           IconButton(
+            onPressed: _exportAttendancePdf,
+            tooltip: 'تصدير تقرير PDF',
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+          ),
+          IconButton(
             onPressed: _loadData,
             tooltip: 'تحديث',
             icon: const Icon(Icons.refresh_rounded),
@@ -1664,6 +2482,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     return _searchQuery.trim().isNotEmpty ||
         _attendanceFilter != _AttendanceFilter.all ||
         _dateFilter != _DateFilter.all ||
-        _selectedGroupId != null;
+        _selectedGroupId != null ||
+        _selectedScheduleId != null;
   }
 }

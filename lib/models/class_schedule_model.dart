@@ -5,6 +5,7 @@ class ClassScheduleModel {
   final String startTime;
   final String endTime;
   final String lessonTitle;
+  final String grade;
 
   const ClassScheduleModel({
     required this.id,
@@ -13,6 +14,7 @@ class ClassScheduleModel {
     required this.startTime,
     required this.endTime,
     required this.lessonTitle,
+    required this.grade,
   });
 
   factory ClassScheduleModel.fromJson(Map<dynamic, dynamic> json) {
@@ -23,6 +25,7 @@ class ClassScheduleModel {
       startTime: json['startTime']?.toString() ?? '',
       endTime: json['endTime']?.toString() ?? '',
       lessonTitle: json['lessonTitle']?.toString() ?? '',
+      grade: json['grade']?.toString() ?? '',
     );
   }
 
@@ -34,6 +37,7 @@ class ClassScheduleModel {
       'startTime': startTime,
       'endTime': endTime,
       'lessonTitle': lessonTitle,
+      'grade': grade,
     };
   }
 
@@ -44,6 +48,7 @@ class ClassScheduleModel {
     String? startTime,
     String? endTime,
     String? lessonTitle,
+    String? grade,
   }) {
     return ClassScheduleModel(
       id: id ?? this.id,
@@ -52,6 +57,7 @@ class ClassScheduleModel {
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       lessonTitle: lessonTitle ?? this.lessonTitle,
+      grade: grade ?? this.grade,
     );
   }
 }

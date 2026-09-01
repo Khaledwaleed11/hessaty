@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 
 class SettingsScreen extends StatelessWidget {
-  static const String _appVersion = '1.0.0';
+  static const String appVersion = '1.0.0';
 
-  final bool isDarkMode;
   final VoidCallback onThemeToggle;
 
-  const SettingsScreen({
-    super.key,
-    required this.isDarkMode,
-    required this.onThemeToggle,
-  });
+  const SettingsScreen({super.key, required this.onThemeToggle});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+
+    // اقرأ حالة الـ Theme الحقيقية من Flutter
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: colors.surfaceContainerLowest,
@@ -40,7 +38,7 @@ class SettingsScreen extends StatelessWidget {
 
                     const SizedBox(height: 12),
 
-                    _buildThemeCard(colors),
+                    _buildThemeCard(context, colors, isDarkMode),
 
                     const SizedBox(height: 26),
 
@@ -66,8 +64,8 @@ class SettingsScreen extends StatelessWidget {
                       colors,
                       icon: Icons.verified_rounded,
                       title: 'إصدار التطبيق',
-                      subtitle: 'الإصدار الحالي $_appVersion',
-                      trailing: _buildVersionBadge(colors, _appVersion),
+                      subtitle: 'الإصدار الحالي $appVersion',
+                      trailing: _buildVersionBadge(colors, appVersion),
                     ),
 
                     const SizedBox(height: 26),
@@ -219,7 +217,11 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildThemeCard(ColorScheme colors) {
+  Widget _buildThemeCard(
+    BuildContext context,
+    ColorScheme colors,
+    bool isDarkMode,
+  ) {
     final icon = isDarkMode
         ? Icons.dark_mode_rounded
         : Icons.light_mode_rounded;
@@ -235,10 +237,11 @@ class SettingsScreen extends StatelessWidget {
       icon: icon,
       title: title,
       subtitle: subtitle,
-      onTap: onThemeToggle,
       trailing: Switch.adaptive(
         value: isDarkMode,
-        onChanged: (_) => onThemeToggle(),
+        onChanged: (_) {
+          onThemeToggle();
+        },
       ),
     );
   }
@@ -284,99 +287,75 @@ class SettingsScreen extends StatelessWidget {
     required String title,
     required String subtitle,
     Widget? trailing,
-    VoidCallback? onTap,
   }) {
     return Material(
       color: colors.surface,
       borderRadius: BorderRadius.circular(21),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(21),
-        splashColor: colors.primary.withValues(alpha: 0.04),
-        highlightColor: colors.primary.withValues(alpha: 0.02),
-        child: Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(21),
-            border: Border.all(
-              color: colors.outlineVariant.withValues(alpha: 0.28),
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(21),
+          border: Border.all(
+            color: colors.outlineVariant.withValues(alpha: 0.28),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colors.shadow.withValues(alpha: 0.025),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: colors.shadow.withValues(alpha: 0.025),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.09),
+                borderRadius: BorderRadius.circular(15),
               ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.09),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(icon, size: 22, color: colors.primary),
-              ),
+              child: Icon(icon, size: 22, color: colors.primary),
+            ),
 
-              const SizedBox(width: 13),
+            const SizedBox(width: 13),
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: colors.onSurface,
-                      ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: colors.onSurface,
                     ),
-
-                    const SizedBox(height: 5),
-
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        height: 1.35,
-                        fontWeight: FontWeight.w500,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              if (trailing != null)
-                trailing
-              else if (onTap != null)
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerHighest.withValues(
-                      alpha: 0.55,
-                    ),
-                    shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 11,
-                    color: colors.onSurfaceVariant,
+
+                  const SizedBox(height: 5),
+
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      height: 1.35,
+                      fontWeight: FontWeight.w500,
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
-                ),
-            ],
-          ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            if (trailing != null) trailing,
+          ],
         ),
       ),
     );
@@ -394,7 +373,9 @@ class SettingsScreen extends StatelessWidget {
           ),
           child: Icon(Icons.school_rounded, size: 19, color: colors.primary),
         ),
+
         const SizedBox(height: 9),
+
         Text(
           'حصتي',
           style: TextStyle(
@@ -403,7 +384,9 @@ class SettingsScreen extends StatelessWidget {
             color: colors.onSurface,
           ),
         ),
+
         const SizedBox(height: 3),
+
         Text(
           'إدارة الحصص بطريقة أبسط',
           style: TextStyle(fontSize: 9, color: colors.onSurfaceVariant),

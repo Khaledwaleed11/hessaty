@@ -78,8 +78,10 @@ class GroupCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
+
+                    // المجموعة مرتبطة باليوم فقط.
                     Text(
-                      group.grade,
+                      'مجموعة ${_dayName(group.weekday)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -88,7 +90,9 @@ class GroupCard extends StatelessWidget {
                         color: colors.onSurfaceVariant,
                       ),
                     ),
+
                     const SizedBox(height: 8),
+
                     Row(
                       children: [
                         _buildMeta(
@@ -158,12 +162,38 @@ class GroupCard extends StatelessWidget {
     );
   }
 
-  Widget _buildMeta(ColorScheme colors, IconData icon, String text) {
+  String _dayName(int day) {
+    const days = [
+      'السبت',
+      'الأحد',
+      'الاثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+    ];
+
+    if (day < 1 || day > days.length) {
+      return '';
+    }
+
+    return days[day - 1];
+  }
+
+  Widget _buildMeta(
+      ColorScheme colors,
+      IconData icon,
+      String text,
+      ) {
     return Flexible(
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: colors.primary),
+          Icon(
+            icon,
+            size: 13,
+            color: colors.primary,
+          ),
           const SizedBox(width: 4),
           Flexible(
             child: Text(

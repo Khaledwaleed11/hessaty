@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -30,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<StudentModel> _students = [];
 
   bool _isLoading = true;
-
+  Timer? _statusTimer;
   late final Box _groupsBox;
   late final Box _studentsBox;
   late final Box _schedulesBox;
@@ -81,6 +83,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _schedulesBox.listenable().addListener(_onHiveChanged);
 
     _loadDashboard();
+
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 1),
+          (_) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {});
+      },
+    );
   }
 
   void _onHiveChanged() {
@@ -291,9 +304,10 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(builder: (_) => const AttendanceHistoryScreen()),
     );
   }
-
   @override
   void dispose() {
+    _statusTimer?.cancel();
+
     _groupsBox.listenable().removeListener(_onHiveChanged);
     _studentsBox.listenable().removeListener(_onHiveChanged);
     _schedulesBox.listenable().removeListener(_onHiveChanged);
@@ -420,29 +434,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: colors.outlineVariant.withValues(alpha: 0.30),
                 ),
               ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(
-                    Icons.notifications_none_rounded,
-                    size: 22,
-                    color: colors.onSurface,
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 9,
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: colors.error,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: colors.surface, width: 1.5),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+
             ),
           ),
         ),

@@ -299,9 +299,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
     _statusTimer?.cancel();
 
     _studentsBox.listenable().removeListener(_onHiveChanged);
-
     _groupsBox.listenable().removeListener(_onHiveChanged);
-
     _schedulesBox.listenable().removeListener(_onHiveChanged);
 
     super.dispose();
@@ -330,17 +328,11 @@ class _StudentsScreenState extends State<StudentsScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
                       children: [
                         _buildHeroHeader(colors),
-
                         const SizedBox(height: 16),
-
                         _buildSearchBox(colors),
-
                         const SizedBox(height: 18),
-
                         _buildOverview(colors),
-
                         const SizedBox(height: 24),
-
                         _buildStudentsSection(colors),
                       ],
                     ),
@@ -509,9 +501,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
           const Text(
             'طلابك في مكان واحد',
             style: TextStyle(
@@ -520,9 +510,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
               color: Colors.white,
             ),
           ),
-
           const SizedBox(height: 5),
-
           Text(
             _students.isEmpty
                 ? 'ابدأ بتسجيل أول طالب وإسناده إلى إحدى حصصك.'
@@ -533,9 +521,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
               color: Colors.white.withValues(alpha: 0.76),
             ),
           ),
-
           const SizedBox(height: 18),
-
           Row(
             children: [
               Expanded(
@@ -802,9 +788,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
           actionText: students.isEmpty ? null : 'تسجيل طالب',
           onAction: students.isEmpty ? null : () => _showStudentDialog(),
         ),
-
         const SizedBox(height: 12),
-
         if (students.isEmpty)
           _buildEmptyStudents(colors)
         else
@@ -934,11 +918,8 @@ class _StudentDialog extends StatefulWidget {
 
 class _StudentDialogState extends State<_StudentDialog> {
   late final TextEditingController _nameController;
-
   late final TextEditingController _phoneController;
-
   late final TextEditingController _parentPhoneController;
-
   late final TextEditingController _notesController;
 
   late int _selectedDay;
@@ -969,7 +950,6 @@ class _StudentDialogState extends State<_StudentDialog> {
     final initialSchedule = studentSchedule ?? _getFirstSchedule();
 
     _selectedScheduleId = initialSchedule.id;
-
     _selectedDay = initialSchedule.weekday;
 
     _syncSelectedSchedule();
@@ -996,12 +976,14 @@ class _StudentDialogState extends State<_StudentDialog> {
       return null;
     }
 
+    // الأولوية للحصة المسجلة فعليًا مع الطالب.
     for (final schedule in widget.schedules) {
       if (schedule.id == student.scheduleId) {
         return schedule;
       }
     }
 
+    // fallback للبيانات القديمة.
     for (final schedule in widget.schedules) {
       if (schedule.groupId == student.groupId) {
         return schedule;
@@ -1166,6 +1148,24 @@ class _StudentDialogState extends State<_StudentDialog> {
       return;
     }
 
+    // الصف أصبح تابعًا للحصة وليس للمجموعة.
+    final grade = selectedSchedule.grade.trim();
+
+    if (grade.isEmpty) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'هذه الحصة لا تحتوي على صف دراسي. عدّل الحصة وأضف الصف أولًا.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -1180,10 +1180,16 @@ class _StudentDialogState extends State<_StudentDialog> {
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         parentPhone: _parentPhoneController.text.trim(),
-        grade: selectedGroup.grade,
+
+        // مهم:
+        // grade يأتي من الحصة المختارة وليس المجموعة.
+        grade: selectedSchedule.grade.trim(),
+
         groupId: selectedGroup.id,
         notes: _notesController.text.trim(),
         registrationDate: existingStudent?.registrationDate ?? DateTime.now(),
+
+        // الطالب مرتبط بالحصة نفسها.
         scheduleId: selectedSchedule.id,
       );
 
@@ -1472,38 +1478,66 @@ class _StudentDialogState extends State<_StudentDialog> {
 
                       final groupName = group?.name ?? 'مجموعة غير محددة';
 
+                      final grade = schedule.grade.trim();
+
                       return DropdownMenuItem<String>(
                         value: schedule.id,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: colors.primary.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Icon(
-                                Icons.menu_book_rounded,
-                                size: 16,
-                                color: colors.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: Text(
-                                '$groupName • ${schedule.startTime} → ${schedule.endTime}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.onSurface,
+                        child: SizedBox(
+                          height: 44,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: colors.primary.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Icon(
+                                  Icons.menu_book_rounded,
+                                  size: 15,
+                                  color: colors.primary,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '$groupName • ${schedule.startTime} → ${schedule.endTime}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        height: 1.1,
+                                        fontWeight: FontWeight.w800,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                    if (grade.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        grade,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                          fontSize: 7,
+                                          height: 1.1,
+                                          fontWeight: FontWeight.w600,
+                                          color: colors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }).toList(),
@@ -1532,27 +1566,56 @@ class _StudentDialogState extends State<_StudentDialog> {
                     color: colors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Icon(
-                        Icons.verified_rounded,
-                        color: colors.primary,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${selectedGroup.name} • ${selectedSchedule.startTime} → ${selectedSchedule.endTime}',
-                          textAlign: TextAlign.right,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: colors.onSurface,
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.verified_rounded,
+                            color: colors.primary,
+                            size: 18,
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${selectedGroup.name} • ${selectedSchedule.startTime} → ${selectedSchedule.endTime}',
+                              textAlign: TextAlign.right,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: colors.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+
+                      if (selectedSchedule.grade.trim().isNotEmpty) ...[
+                        const SizedBox(height: 7),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.school_outlined,
+                              color: colors.primary,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'الصف: ${selectedSchedule.grade}',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

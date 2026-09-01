@@ -6,14 +6,9 @@ import 'setting_screen.dart';
 import 'students_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  final bool isDarkMode;
   final VoidCallback onThemeToggle;
 
-  const MainScreen({
-    super.key,
-    required this.isDarkMode,
-    required this.onThemeToggle,
-  });
+  const MainScreen({super.key, required this.onThemeToggle,});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -21,39 +16,6 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int currentIndex = 0;
-
-  late List<Widget> pages;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _initializePages();
-  }
-
-  void _initializePages() {
-    pages = [
-      const HomeScreen(),
-      const ScheduleScreen(),
-      const StudentsScreen(),
-      SettingsScreen(
-        isDarkMode: widget.isDarkMode,
-        onThemeToggle: widget.onThemeToggle,
-      ),
-    ];
-  }
-
-  @override
-  void didUpdateWidget(covariant MainScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.isDarkMode != widget.isDarkMode) {
-      pages[3] = SettingsScreen(
-        isDarkMode: widget.isDarkMode,
-        onThemeToggle: widget.onThemeToggle,
-      );
-    }
-  }
 
   void changePage(int index) {
     if (index == currentIndex) {
@@ -69,8 +31,16 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
+    final pages = [
+      const HomeScreen(),
+      const ScheduleScreen(),
+      const StudentsScreen(),
+      SettingsScreen(onThemeToggle: widget.onThemeToggle),
+    ];
+
     return Scaffold(
       body: IndexedStack(index: currentIndex, children: pages),
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: changePage,

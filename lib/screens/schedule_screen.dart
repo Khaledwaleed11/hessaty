@@ -1,16 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:hessaty/models/class_schedule_model.dart';
+import 'package:hessaty/models/group_model.dart';
+import 'package:hessaty/services/class_session_service.dart';
+import 'package:hessaty/services/group_service.dart';
+import 'package:hessaty/services/schedule_service.dart';
+import 'package:hessaty/widgets/app_dialog.dart';
+import 'package:hessaty/widgets/app_text_field.dart';
+import 'package:hessaty/widgets/empty_state.dart';
+import 'package:hessaty/widgets/schedule_card.dart';
+import 'package:hessaty/widgets/section_header.dart';
+import 'package:hessaty/screens/attendance_screen.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
-import '../models/class_schedule_model.dart';
-import '../models/group_model.dart';
-import '../services/group_service.dart';
-import '../services/schedule_service.dart';
-import '../widgets/app_dialog.dart';
-import '../widgets/app_text_field.dart';
-import '../widgets/empty_state.dart';
-import '../widgets/schedule_card.dart';
-import '../widgets/section_header.dart';
-import 'attendance_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -24,7 +25,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<GroupModel> _groups = [];
 
   bool _isLoading = true;
-
+  Timer? _statusTimer;
   int _selectedDay = _hessatyWeekday(DateTime.now());
 
   late final Box _groupsBox;
@@ -41,6 +42,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _schedulesBox.listenable().addListener(_onHiveChanged);
 
     _loadData();
+
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 1),
+          (_) {
+        if (!mounted) return;
+
+        setState(() {});
+      },
+    );
   }
 
   static int _hessatyWeekday(DateTime date) {
@@ -83,7 +93,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   String _shortDayName(int day) {
-    const days = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
+    const days = [
+      'سبت',
+      'أحد',
+      'اثنين',
+      'ثلاثاء',
+      'أربعاء',
+      'خميس',
+      'جمعة',
+    ];
 
     if (day < 1 || day > days.length) {
       return '';
@@ -152,7 +170,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         .toList();
 
     schedules.sort(
-      (a, b) =>
+          (a, b) =>
           _timeToMinutes(a.startTime).compareTo(_timeToMinutes(b.startTime)),
     );
 
@@ -205,7 +223,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return (hour * 60) + minute;
   }
 
-  Future<void> _showScheduleDialog({ClassScheduleModel? schedule}) async {
+  Future<void> _showScheduleDialog({
+    ClassScheduleModel? schedule,
+  }) async {
     if (_groups.isEmpty) {
       _showMessage('أضف مجموعة أولًا قبل إضافة الحصة.');
       return;
@@ -264,14 +284,47 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  void _openAttendance(ClassScheduleModel schedule) {
+  Future<void> _openAttendance(
+      ClassScheduleModel schedule,
+      ) async {
+    if (!ClassSessionService.isTodaySchedule(schedule)) {
+      _showMessage(
+        'هذه الحصة متاحة يوم ${_dayName(schedule.weekday)} فقط.',
+        icon: Icons.lock_outline_rounded,
+      );
+
+      return;
+    }
+
+    final status = await ClassSessionService.getStatus(schedule);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (status == ClassStatus.ended) {
+      _showMessage(
+        'انتهت هذه الحصة وتم إغلاق الحضور.',
+        icon: Icons.lock_rounded,
+      );
+
+      return;
+    }
+
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => AttendanceScreen(schedule: schedule)),
+      MaterialPageRoute(
+        builder: (_) => AttendanceScreen(
+          schedule: schedule,
+        ),
+      ),
     );
   }
 
-  void _showMessage(String message, {IconData? icon}) {
+  void _showMessage(
+      String message, {
+        IconData? icon,
+      }) {
     if (!mounted) {
       return;
     }
@@ -283,14 +336,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           content: Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, color: Colors.white, size: 19),
+                Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 19,
+                ),
                 const SizedBox(width: 9),
               ],
-              Expanded(child: Text(message, textAlign: TextAlign.right)),
+              Expanded(
+                child: Text(
+                  message,
+                  textAlign: TextAlign.right,
+                ),
+              ),
             ],
           ),
           behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          margin: const EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            16,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -299,13 +366,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   @override
+  @override
   void dispose() {
+    _statusTimer?.cancel();
+
     _groupsBox.listenable().removeListener(_onHiveChanged);
     _schedulesBox.listenable().removeListener(_onHiveChanged);
 
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -324,7 +393,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           children: [
             const Text(
               'الجدول',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             Text(
               selectedGroup == null
@@ -346,128 +418,182 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 onPressed: () => _showScheduleDialog(),
                 tooltip: 'إضافة حصة',
                 style: IconButton.styleFrom(
-                  backgroundColor: colors.primary.withValues(alpha: 0.09),
+                  backgroundColor: colors.primary.withValues(
+                    alpha: 0.09,
+                  ),
                 ),
-                icon: Icon(Icons.add_rounded, color: colors.primary),
+                icon: Icon(
+                  Icons.add_rounded,
+                  color: colors.primary,
+                ),
               ),
             ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+        child: CircularProgressIndicator(),
+      )
           : RefreshIndicator(
-              color: colors.primary,
-              backgroundColor: colors.surface,
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
+        color: colors.primary,
+        backgroundColor: colors.surface,
+        onRefresh: _loadData,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  8,
                 ),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                      child: _buildHeroHeader(
-                        colors,
-                        selectedGroup,
-                        selectedSchedules,
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
-                      child: _buildDaySelector(colors),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-                      child: SectionHeader(
-                        title: _dayName(_selectedDay),
-                        subtitle: selectedGroup == null
-                            ? 'لا توجد مجموعة'
-                            : '${selectedSchedules.length} ${selectedSchedules.length == 1 ? 'حصة' : 'حصص'}',
-                        actionText: selectedGroup == null ? null : 'إضافة حصة',
-                        onAction: selectedGroup == null
-                            ? null
-                            : () => _showScheduleDialog(),
-                      ),
-                    ),
-                  ),
-                  if (selectedGroup == null)
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 30),
-                      sliver: SliverToBoxAdapter(
-                        child: EmptyState(
-                          icon: Icons.groups_outlined,
-                          title: 'لا توجد مجموعة لهذا اليوم',
-                          message:
-                              'أضف مجموعة لهذا اليوم من شاشة المجموعات ثم يمكنك إنشاء الحصص الخاصة بها.',
-                          buttonText: 'إضافة المجموعة',
-                          buttonIcon: Icons.groups_rounded,
-                          onButtonPressed: _openGroupsMessage,
-                        ),
-                      ),
-                    )
-                  else if (selectedSchedules.isEmpty)
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 30),
-                      sliver: SliverToBoxAdapter(
-                        child: _buildEmptySchedule(colors),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 30),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final schedule = selectedSchedules[index];
-                          final isToday = schedule.weekday == today;
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: ScheduleCard(
-                              schedule: schedule,
-                              group: selectedGroup,
-                              isToday: isToday,
-                              showActions: true,
-                              onTap: isToday
-                                  ? () => _openAttendance(schedule)
-                                  : null,
-                              onEdit: () =>
-                                  _showScheduleDialog(schedule: schedule),
-                              onDelete: () => _deleteSchedule(schedule),
-                            ),
-                          );
-                        }, childCount: selectedSchedules.length),
-                      ),
-                    ),
-                ],
+                child: _buildHeroHeader(
+                  colors,
+                  selectedGroup,
+                  selectedSchedules,
+                ),
               ),
             ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  10,
+                  20,
+                  4,
+                ),
+                child: _buildDaySelector(colors),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  18,
+                  20,
+                  10,
+                ),
+                child: SectionHeader(
+                  title: _dayName(_selectedDay),
+                  subtitle: selectedGroup == null
+                      ? 'لا توجد مجموعة'
+                      : '${selectedSchedules.length} ${selectedSchedules.length == 1 ? 'حصة' : 'حصص'}',
+                  actionText:
+                  selectedGroup == null ? null : 'إضافة حصة',
+                  onAction: selectedGroup == null
+                      ? null
+                      : () => _showScheduleDialog(),
+                ),
+              ),
+            ),
+            if (selectedGroup == null)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  6,
+                  20,
+                  30,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: Icons.groups_outlined,
+                    title: 'لا توجد مجموعة لهذا اليوم',
+                    message:
+                    'أضف مجموعة لهذا اليوم من شاشة المجموعات ثم يمكنك إنشاء الحصص الخاصة بها.',
+                    buttonText: 'إضافة المجموعة',
+                    buttonIcon: Icons.groups_rounded,
+                    onButtonPressed: _openGroupsMessage,
+                  ),
+                ),
+              )
+            else if (selectedSchedules.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  6,
+                  20,
+                  30,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: _buildEmptySchedule(colors),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  6,
+                  20,
+                  30,
+                ),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                      final schedule =
+                      selectedSchedules[index];
+
+                      final isToday =
+                          schedule.weekday == today;
+
+                      final group =
+                      _getGroup(schedule.groupId);
+
+                      return Padding(
+                        padding:
+                        const EdgeInsets.only(bottom: 12),
+                        child: ScheduleCard(
+                          schedule: schedule,
+                          group: group,
+                          isToday: isToday,
+                          showActions: true,
+                          onTap: isToday
+                              ? () =>
+                              _openAttendance(schedule)
+                              : null,
+                          onEdit: () =>
+                              _showScheduleDialog(
+                                schedule: schedule,
+                              ),
+                          onDelete: () =>
+                              _deleteSchedule(schedule),
+                        ),
+                      );
+                    },
+                    childCount: selectedSchedules.length,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
       floatingActionButton: selectedGroup == null
           ? null
           : FloatingActionButton.extended(
-              heroTag: 'schedule_add_fab',
-              onPressed: () => _showScheduleDialog(),
-              backgroundColor: colors.primary,
-              foregroundColor: colors.onPrimary,
-              elevation: 5,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text(
-                'إضافة حصة',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
+        heroTag: 'schedule_add_fab',
+        onPressed: () => _showScheduleDialog(),
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
+        elevation: 5,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text(
+          'إضافة حصة',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildHeroHeader(
-    ColorScheme colors,
-    GroupModel? selectedGroup,
-    List<ClassScheduleModel> schedules,
-  ) {
+      ColorScheme colors,
+      GroupModel? selectedGroup,
+      List<ClassScheduleModel> schedules,
+      ) {
     final today = _hessatyWeekday(DateTime.now());
     final isToday = _selectedDay == today;
 
@@ -480,7 +606,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           end: Alignment.bottomLeft,
           colors: [
             colors.primary,
-            Color.lerp(colors.primary, colors.primaryContainer, 0.62)!,
+            Color.lerp(
+              colors.primary,
+              colors.primaryContainer,
+              0.62,
+            )!,
           ],
         ),
         borderRadius: BorderRadius.circular(28),
@@ -513,10 +643,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isToday ? 'جدول اليوم' : 'جدول اليوم المختار',
+                      isToday
+                          ? 'جدول اليوم'
+                          : 'جدول اليوم المختار',
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -568,19 +701,29 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 11,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.10),
+        ),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.white),
+          Icon(
+            icon,
+            size: 18,
+            color: Colors.white,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
@@ -627,7 +770,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ),
             const Spacer(),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 9,
+                vertical: 5,
+              ),
               decoration: BoxDecoration(
                 color: colors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
@@ -650,12 +796,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             itemCount: 7,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            separatorBuilder: (_, _) =>
+            const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final day = index + 1;
               final selected = day == _selectedDay;
               final isToday = day == today;
-              final hasGroup = _getGroupForDay(day) != null;
+              final hasGroup =
+                  _getGroupForDay(day) != null;
 
               return GestureDetector(
                 onTap: () {
@@ -664,7 +812,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   });
                 },
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
+                  duration: const Duration(
+                    milliseconds: 220,
+                  ),
                   curve: Curves.easeOut,
                   width: 72,
                   padding: const EdgeInsets.symmetric(
@@ -674,55 +824,66 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   decoration: BoxDecoration(
                     gradient: selected
                         ? LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              colors.primary,
-                              Color.lerp(
-                                colors.primary,
-                                colors.primaryContainer,
-                                0.45,
-                              )!,
-                            ],
-                          )
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        colors.primary,
+                        Color.lerp(
+                          colors.primary,
+                          colors.primaryContainer,
+                          0.45,
+                        )!,
+                      ],
+                    )
                         : null,
-                    color: selected ? null : colors.surface,
+                    color: selected
+                        ? null
+                        : colors.surface,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: selected
                           ? colors.primary
                           : isToday
-                          ? colors.primary.withValues(alpha: 0.40)
-                          : colors.outlineVariant.withValues(alpha: 0.28),
+                          ? colors.primary.withValues(
+                        alpha: 0.40,
+                      )
+                          : colors.outlineVariant
+                          .withValues(alpha: 0.28),
                       width: selected ? 1.3 : 1,
                     ),
                     boxShadow: selected
                         ? [
-                            BoxShadow(
-                              color: colors.primary.withValues(alpha: 0.18),
-                              blurRadius: 14,
-                              offset: const Offset(0, 6),
-                            ),
-                          ]
+                      BoxShadow(
+                        color: colors.primary
+                            .withValues(alpha: 0.18),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ]
                         : null,
                   ),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment:
+                    MainAxisAlignment.center,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisAlignment:
+                        MainAxisAlignment.center,
                         children: [
                           Flexible(
                             child: Text(
                               _shortDayName(day),
                               maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              overflow:
+                              TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                                fontWeight:
+                                FontWeight.w800,
                                 color: selected
                                     ? colors.onPrimary
-                                    : colors.onSurfaceVariant,
+                                    : colors
+                                    .onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -731,7 +892,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             Container(
                               width: 5,
                               height: 5,
-                              decoration: BoxDecoration(
+                              decoration:
+                              BoxDecoration(
                                 color: selected
                                     ? colors.onPrimary
                                     : colors.primary,
@@ -747,22 +909,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
-                          color: selected ? colors.onPrimary : colors.onSurface,
+                          color: selected
+                              ? colors.onPrimary
+                              : colors.onSurface,
                         ),
                       ),
                       const SizedBox(height: 4),
                       AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
+                        duration: const Duration(
+                          milliseconds: 220,
+                        ),
                         width: hasGroup ? 7 : 5,
                         height: hasGroup ? 7 : 5,
                         decoration: BoxDecoration(
                           color: hasGroup
                               ? selected
-                                    ? colors.onPrimary
-                                    : colors.primary
+                              ? colors.onPrimary
+                              : colors.primary
                               : selected
-                              ? colors.onPrimary.withValues(alpha: 0.35)
-                              : colors.onSurfaceVariant.withValues(alpha: 0.28),
+                              ? colors.onPrimary
+                              .withValues(alpha: 0.35)
+                              : colors.onSurfaceVariant
+                              .withValues(alpha: 0.28),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -787,7 +955,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         color: colors.surface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: colors.outlineVariant.withValues(alpha: 0.26),
+          color: colors.outlineVariant.withValues(
+            alpha: 0.26,
+          ),
         ),
         boxShadow: [
           BoxShadow(
@@ -840,7 +1010,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               icon: const Icon(Icons.add_rounded),
               label: const Text(
                 'إضافة أول حصة',
-                style: TextStyle(fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
@@ -869,17 +1041,20 @@ class _ScheduleDialog extends StatefulWidget {
   });
 
   @override
-  State<_ScheduleDialog> createState() => _ScheduleDialogState();
+  State<_ScheduleDialog> createState() =>
+      _ScheduleDialogState();
 }
 
 class _ScheduleDialogState extends State<_ScheduleDialog> {
   late final TextEditingController _timeController;
   late final TextEditingController _endTimeController;
   late final TextEditingController _titleController;
+  late final TextEditingController _gradeController;
 
   late int _selectedWeekday;
 
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _formKey =
+  GlobalKey<FormState>();
 
   bool _isSaving = false;
 
@@ -889,15 +1064,27 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
 
     final schedule = widget.schedule;
 
-    _timeController = TextEditingController(text: schedule?.startTime ?? '');
+    _timeController = TextEditingController(
+      text: schedule?.startTime ?? '',
+    );
 
-    _endTimeController = TextEditingController(text: schedule?.endTime ?? '');
+    _endTimeController = TextEditingController(
+      text: schedule?.endTime ?? '',
+    );
 
-    _titleController = TextEditingController(text: schedule?.lessonTitle ?? '');
+    _titleController = TextEditingController(
+      text: schedule?.lessonTitle ?? '',
+    );
 
-    _selectedWeekday = schedule?.weekday ?? widget.initialWeekday;
+    _gradeController = TextEditingController(
+      text: schedule?.grade ?? '',
+    );
 
-    if (_selectedWeekday < 1 || _selectedWeekday > 7) {
+    _selectedWeekday =
+        schedule?.weekday ?? widget.initialWeekday;
+
+    if (_selectedWeekday < 1 ||
+        _selectedWeekday > 7) {
       _selectedWeekday = widget.initialWeekday;
     }
   }
@@ -907,6 +1094,7 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
     _timeController.dispose();
     _endTimeController.dispose();
     _titleController.dispose();
+    _gradeController.dispose();
 
     super.dispose();
   }
@@ -940,35 +1128,54 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
       return null;
     }
 
-    var hour = int.tryParse(match.group(1) ?? '') ?? 0;
-    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    var hour =
+        int.tryParse(match.group(1) ?? '') ?? 0;
+
+    final minute =
+        int.tryParse(match.group(2) ?? '') ?? 0;
+
     final period = match.group(3);
 
-    if ((period == 'AM' || period == 'ص') && hour == 12) {
+    if ((period == 'AM' || period == 'ص') &&
+        hour == 12) {
       hour = 0;
     }
 
-    if ((period == 'PM' || period == 'م') && hour != 12) {
+    if ((period == 'PM' || period == 'م') &&
+        hour != 12) {
       hour += 12;
     }
 
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    if (hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
       return null;
     }
 
-    return TimeOfDay(hour: hour, minute: minute);
+    return TimeOfDay(
+      hour: hour,
+      minute: minute,
+    );
   }
 
   String _formatTime(TimeOfDay time) {
-    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = time.period == DayPeriod.am ? 'ص' : 'م';
+    final hour =
+    time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+
+    final minute =
+    time.minute.toString().padLeft(2, '0');
+
+    final period =
+    time.period == DayPeriod.am ? 'ص' : 'م';
 
     return '$hour:$minute $period';
   }
 
   Future<void> _pickStartTime() async {
-    final initialTime = _parseTime(_timeController.text) ?? TimeOfDay.now();
+    final initialTime =
+        _parseTime(_timeController.text) ??
+            TimeOfDay.now();
 
     final pickedTime = await showTimePicker(
       context: context,
@@ -985,18 +1192,25 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
     }
 
     setState(() {
-      _timeController.text = _formatTime(pickedTime);
+      _timeController.text =
+          _formatTime(pickedTime);
     });
   }
 
   Future<void> _pickEndTime() async {
-    final startTime = _parseTime(_timeController.text);
+    final startTime =
+    _parseTime(_timeController.text);
 
     final defaultEndTime = startTime == null
         ? TimeOfDay.now()
-        : TimeOfDay(hour: (startTime.hour + 1) % 24, minute: startTime.minute);
+        : TimeOfDay(
+      hour: (startTime.hour + 1) % 24,
+      minute: startTime.minute,
+    );
 
-    final initialTime = _parseTime(_endTimeController.text) ?? defaultEndTime;
+    final initialTime =
+        _parseTime(_endTimeController.text) ??
+            defaultEndTime;
 
     final pickedTime = await showTimePicker(
       context: context,
@@ -1013,7 +1227,8 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
     }
 
     setState(() {
-      _endTimeController.text = _formatTime(pickedTime);
+      _endTimeController.text =
+          _formatTime(pickedTime);
     });
   }
 
@@ -1039,27 +1254,37 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
     final startTime = _timeController.text.trim();
     final endTime = _endTimeController.text.trim();
     final title = _titleController.text.trim();
+    final grade = _gradeController.text.trim();
 
     final start = _parseTime(startTime);
     final end = _parseTime(endTime);
 
     if (start == null || end == null) {
-      _showError('اختار وقت البداية والنهاية بشكل صحيح.');
+      _showError(
+        'اختار وقت البداية والنهاية بشكل صحيح.',
+      );
       return;
     }
 
-    final startMinutes = start.hour * 60 + start.minute;
-    final endMinutes = end.hour * 60 + end.minute;
+    final startMinutes =
+        start.hour * 60 + start.minute;
+
+    final endMinutes =
+        end.hour * 60 + end.minute;
 
     if (endMinutes <= startMinutes) {
-      _showError('وقت النهاية يجب أن يكون بعد وقت البداية.');
+      _showError(
+        'وقت النهاية يجب أن يكون بعد وقت البداية.',
+      );
       return;
     }
 
     final group = _getGroupForSelectedDay();
 
     if (group == null) {
-      _showError('لا توجد مجموعة ليوم ${_dayName(_selectedWeekday)}.');
+      _showError(
+        'لا توجد مجموعة ليوم ${_dayName(_selectedWeekday)}.',
+      );
       return;
     }
 
@@ -1071,12 +1296,16 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
       final existing = widget.schedule;
 
       final schedule = ClassScheduleModel(
-        id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+        id: existing?.id ??
+            DateTime.now()
+                .microsecondsSinceEpoch
+                .toString(),
         groupId: group.id,
         weekday: group.weekday,
         startTime: startTime,
         endTime: endTime,
         lessonTitle: title,
+        grade: grade,
       );
 
       await ScheduleService.addSchedule(schedule);
@@ -1108,7 +1337,10 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message, textAlign: TextAlign.right),
+          content: Text(
+            message,
+            textAlign: TextAlign.right,
+          ),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -1119,28 +1351,41 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final colors =
+        Theme.of(context).colorScheme;
+
     final isEditing = widget.schedule != null;
-    final selectedGroup = _getGroupForSelectedDay();
+
+    final selectedGroup =
+    _getGroupForSelectedDay();
 
     return AlertDialog(
       backgroundColor: colors.surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 8),
-      contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(28),
+      ),
+      titlePadding:
+      const EdgeInsets.fromLTRB(22, 20, 22, 8),
+      contentPadding:
+      const EdgeInsets.fromLTRB(22, 8, 22, 8),
+      actionsPadding:
+      const EdgeInsets.fromLTRB(16, 6, 16, 16),
       title: Row(
         children: [
           Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(14),
+              color:
+              colors.primary.withValues(alpha: 0.09),
+              borderRadius:
+              BorderRadius.circular(14),
             ),
             child: Icon(
-              isEditing ? Icons.edit_calendar_rounded : Icons.add_task_rounded,
+              isEditing
+                  ? Icons.edit_calendar_rounded
+                  : Icons.add_task_rounded,
               color: colors.primary,
               size: 22,
             ),
@@ -1148,10 +1393,13 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
           const SizedBox(width: 11),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 Text(
-                  isEditing ? 'تعديل الحصة' : 'إضافة حصة',
+                  isEditing
+                      ? 'تعديل الحصة'
+                      : 'إضافة حصة',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -1165,7 +1413,8 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w500,
-                    color: colors.onSurfaceVariant,
+                    color:
+                    colors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1177,81 +1426,112 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment:
+            CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 8),
+
               DropdownButtonFormField<int>(
                 initialValue: _selectedWeekday,
                 isExpanded: true,
-                decoration: const InputDecoration(
+                decoration:
+                const InputDecoration(
                   labelText: 'اليوم',
-                  prefixIcon: Icon(Icons.calendar_today_rounded),
+                  prefixIcon: Icon(
+                    Icons.calendar_today_rounded,
+                  ),
                 ),
-                items: List.generate(7, (index) {
-                  final day = index + 1;
-                  final hasGroup = widget.groups.any(
-                    (group) => group.weekday == day,
-                  );
+                items: List.generate(
+                  7,
+                      (index) {
+                    final day = index + 1;
 
-                  return DropdownMenuItem<int>(
-                    value: day,
-                    enabled: hasGroup,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _dayName(day),
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: hasGroup
-                                  ? colors.onSurface
-                                  : colors.onSurfaceVariant.withValues(
-                                      alpha: 0.45,
-                                    ),
-                            ),
-                          ),
-                        ),
-                        if (!hasGroup)
-                          Text(
-                            'بدون مجموعة',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: colors.onSurfaceVariant.withValues(
-                                alpha: 0.50,
+                    final hasGroup =
+                    widget.groups.any(
+                          (group) =>
+                      group.weekday == day,
+                    );
+
+                    return DropdownMenuItem<int>(
+                      value: day,
+                      enabled: hasGroup,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _dayName(day),
+                              textAlign:
+                              TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                FontWeight.w800,
+                                color: hasGroup
+                                    ? colors.onSurface
+                                    : colors
+                                    .onSurfaceVariant
+                                    .withValues(
+                                  alpha: 0.45,
+                                ),
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                  );
-                }),
+                          if (!hasGroup)
+                            Text(
+                              'بدون مجموعة',
+                              style: TextStyle(
+                                fontSize: 8,
+                                color: colors
+                                    .onSurfaceVariant
+                                    .withValues(
+                                  alpha: 0.50,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 onChanged: _isSaving
                     ? null
                     : (value) {
-                        if (value == null) {
-                          return;
-                        }
+                  if (value == null) {
+                    return;
+                  }
 
-                        setState(() {
-                          _selectedWeekday = value;
-                        });
-                      },
+                  setState(() {
+                    _selectedWeekday =
+                        value;
+                  });
+                },
               ),
+
               const SizedBox(height: 12),
+
               AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                padding: const EdgeInsets.all(12),
+                duration:
+                const Duration(milliseconds: 220),
+                padding:
+                const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: selectedGroup == null
-                      ? colors.error.withValues(alpha: 0.06)
-                      : colors.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(16),
+                      ? colors.error.withValues(
+                    alpha: 0.06,
+                  )
+                      : colors.primary.withValues(
+                    alpha: 0.06,
+                  ),
+                  borderRadius:
+                  BorderRadius.circular(16),
                   border: Border.all(
                     color: selectedGroup == null
-                        ? colors.error.withValues(alpha: 0.15)
-                        : colors.primary.withValues(alpha: 0.12),
+                        ? colors.error.withValues(
+                      alpha: 0.15,
+                    )
+                        : colors.primary.withValues(
+                      alpha: 0.12,
+                    ),
                   ),
                 ),
                 child: Row(
@@ -1259,15 +1539,26 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                     Container(
                       width: 38,
                       height: 38,
-                      decoration: BoxDecoration(
+                      decoration:
+                      BoxDecoration(
                         color: selectedGroup == null
-                            ? colors.error.withValues(alpha: 0.10)
-                            : colors.primary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(11),
+                            ? colors.error
+                            .withValues(
+                          alpha: 0.10,
+                        )
+                            : colors.primary
+                            .withValues(
+                          alpha: 0.10,
+                        ),
+                        borderRadius:
+                        BorderRadius.circular(
+                          11,
+                        ),
                       ),
                       child: Icon(
                         selectedGroup == null
-                            ? Icons.error_outline_rounded
+                            ? Icons
+                            .error_outline_rounded
                             : Icons.groups_rounded,
                         size: 19,
                         color: selectedGroup == null
@@ -1278,14 +1569,18 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                     const SizedBox(width: 9),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                        CrossAxisAlignment.start,
                         children: [
                           Text(
-                            selectedGroup?.name ?? 'لا توجد مجموعة',
+                            selectedGroup?.name ??
+                                'لا توجد مجموعة',
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              color: selectedGroup == null
+                              fontWeight:
+                              FontWeight.w900,
+                              color: selectedGroup ==
+                                  null
                                   ? colors.error
                                   : colors.onSurface,
                             ),
@@ -1294,12 +1589,22 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                           Text(
                             selectedGroup == null
                                 ? 'أضف مجموعة لهذا اليوم أولًا'
-                                : selectedGroup.grade,
+                                : isEditing &&
+                                widget.schedule
+                                    ?.grade
+                                    .trim()
+                                    .isNotEmpty ==
+                                    true
+                                ? widget.schedule!
+                                .grade
+                                : 'أدخل الصف الدراسي للحصة',
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            overflow:
+                            TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 9,
-                              color: colors.onSurfaceVariant,
+                              color: colors
+                                  .onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -1308,15 +1613,19 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 14),
+
               Row(
                 children: [
                   Expanded(
                     child: AppTextField(
-                      controller: _timeController,
+                      controller:
+                      _timeController,
                       label: 'البداية',
                       hintText: 'اختيار الوقت',
-                      prefixIcon: Icons.play_circle_outline_rounded,
+                      prefixIcon: Icons
+                          .play_circle_outline_rounded,
                       suffixIcon: Icon(
                         Icons.access_time_rounded,
                         color: colors.primary,
@@ -1324,7 +1633,8 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                       readOnly: true,
                       onTap: _pickStartTime,
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
+                        if (value == null ||
+                            value.trim().isEmpty) {
                           return 'اختر البداية';
                         }
 
@@ -1335,18 +1645,22 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: AppTextField(
-                      controller: _endTimeController,
+                      controller:
+                      _endTimeController,
                       label: 'النهاية',
                       hintText: 'اختيار الوقت',
-                      prefixIcon: Icons.stop_circle_outlined,
+                      prefixIcon: Icons
+                          .stop_circle_outlined,
                       suffixIcon: Icon(
-                        Icons.access_time_filled_rounded,
+                        Icons
+                            .access_time_filled_rounded,
                         color: colors.primary,
                       ),
                       readOnly: true,
                       onTap: _pickEndTime,
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
+                        if (value == null ||
+                            value.trim().isEmpty) {
                           return 'اختر النهاية';
                         }
 
@@ -1356,47 +1670,82 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 14),
+
               AppTextField(
                 controller: _titleController,
                 label: 'عنوان الدرس',
                 hintText: 'مثال: الجبر',
-                textInputAction: TextInputAction.done,
-                prefixIcon: Icons.menu_book_rounded,
+                textInputAction:
+                TextInputAction.next,
+                prefixIcon:
+                Icons.menu_book_rounded,
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'اكتب عنوان الدرس';
                   }
 
                   return null;
                 },
               ),
+
+              const SizedBox(height: 12),
+
+              AppTextField(
+                controller: _gradeController,
+                label: 'الصف الدراسي',
+                hintText:
+                'مثال: الصف الثالث الثانوي',
+                textInputAction:
+                TextInputAction.done,
+                prefixIcon:
+                Icons.school_outlined,
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return 'اكتب الصف الدراسي';
+                  }
+
+                  return null;
+                },
+              ),
+
               const SizedBox(height: 10),
+
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                const EdgeInsets.symmetric(
                   horizontal: 11,
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(13),
+                  color: colors
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.55),
+                  borderRadius:
+                  BorderRadius.circular(13),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.info_outline_rounded,
                       size: 17,
-                      color: colors.onSurfaceVariant,
+                      color:
+                      colors.onSurfaceVariant,
                     ),
                     const SizedBox(width: 7),
                     Expanded(
                       child: Text(
                         'وقت البداية والنهاية يتم اختيارهما من Time Picker.',
-                        textAlign: TextAlign.right,
+                        textAlign:
+                        TextAlign.right,
                         style: TextStyle(
                           fontSize: 9,
                           height: 1.4,
-                          color: colors.onSurfaceVariant,
+                          color: colors
+                              .onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1409,24 +1758,33 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _isSaving ? null : () => Navigator.pop(context, false),
+          onPressed: _isSaving
+              ? null
+              : () =>
+              Navigator.pop(context, false),
           child: const Text('إلغاء'),
         ),
         FilledButton.icon(
-          onPressed: _isSaving || selectedGroup == null ? null : _save,
+          onPressed:
+          _isSaving || selectedGroup == null
+              ? null
+              : _save,
           icon: _isSaving
               ? const SizedBox(
-                  width: 17,
-                  height: 17,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+            width: 17,
+            height: 17,
+            child:
+            CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          )
               : Icon(
-                  isEditing ? Icons.check_rounded : Icons.add_rounded,
-                  size: 18,
-                ),
+            isEditing
+                ? Icons.check_rounded
+                : Icons.add_rounded,
+            size: 18,
+          ),
           label: Text(
             _isSaving
                 ? 'جارٍ الحفظ...'

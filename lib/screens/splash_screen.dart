@@ -26,6 +26,8 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
 
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
@@ -52,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Timer(const Duration(milliseconds: 2200), _openApp);
+    _timer = Timer(const Duration(milliseconds: 2200), _openApp);
   }
 
   void _openApp() {
@@ -63,12 +65,11 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 650),
+
         pageBuilder: (_, animation, __) {
-          return MainScreen(
-            isDarkMode: widget.isDarkMode,
-            onThemeToggle: widget.onThemeToggle,
-          );
+          return MainScreen(onThemeToggle: widget.onThemeToggle);
         },
+
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
             opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
@@ -81,6 +82,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _timer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -91,6 +93,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     return Scaffold(
       backgroundColor: colors.surfaceContainerLowest,
+
       body: Stack(
         children: [
           Positioned(
@@ -98,11 +101,13 @@ class _SplashScreenState extends State<SplashScreen>
             right: -70,
             child: _buildGlow(colors.primary, 220),
           ),
+
           Positioned(
             bottom: -100,
             left: -80,
             child: _buildGlow(colors.secondary, 240),
           ),
+
           SafeArea(
             child: Center(
               child: AnimatedBuilder(
@@ -131,7 +136,9 @@ class _SplashScreenState extends State<SplashScreen>
                                   )!,
                                 ],
                               ),
+
                               borderRadius: BorderRadius.circular(34),
+
                               boxShadow: [
                                 BoxShadow(
                                   color: colors.primary.withValues(alpha: 0.24),
@@ -140,6 +147,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                               ],
                             ),
+
                             child: Icon(
                               Icons.school_rounded,
                               size: 58,
@@ -148,7 +156,9 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                         ),
                       ),
+
                       const SizedBox(height: 28),
+
                       SlideTransition(
                         position: _slideAnimation,
                         child: FadeTransition(
@@ -164,7 +174,9 @@ class _SplashScreenState extends State<SplashScreen>
                                   letterSpacing: -0.8,
                                 ),
                               ),
+
                               const SizedBox(height: 8),
+
                               Text(
                                 'إدارة حصصك وطلابك بسهولة',
                                 textAlign: TextAlign.center,
@@ -184,6 +196,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
           ),
+
           Positioned(
             left: 0,
             right: 0,

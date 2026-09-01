@@ -24,7 +24,8 @@ class ScheduleCard extends StatelessWidget {
     this.isToday = false,
   });
 
-  bool get _hasActions => showActions && (onEdit != null || onDelete != null);
+  bool get _hasActions =>
+      showActions && (onEdit != null || onDelete != null);
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +60,9 @@ class ScheduleCard extends StatelessWidget {
             children: [
               _buildTimeBox(colors),
               const SizedBox(width: 12),
-              Expanded(child: _buildContent(colors)),
+              Expanded(
+                child: _buildContent(colors),
+              ),
               const SizedBox(width: 8),
               _buildTrailing(context, colors),
             ],
@@ -74,12 +77,16 @@ class ScheduleCard extends StatelessWidget {
         ? colors.primary
         : colors.primary.withValues(alpha: 0.09);
 
-    final foregroundColor = isToday ? colors.onPrimary : colors.primary;
+    final foregroundColor =
+    isToday ? colors.onPrimary : colors.primary;
 
     return Container(
       width: 72,
       height: 76,
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 5,
+        vertical: 7,
+      ),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(17),
@@ -87,7 +94,11 @@ class ScheduleCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.access_time_rounded, size: 17, color: foregroundColor),
+          Icon(
+            Icons.access_time_rounded,
+            size: 17,
+            color: foregroundColor,
+          ),
           const SizedBox(height: 4),
           Text(
             schedule.startTime,
@@ -133,10 +144,17 @@ class ScheduleCard extends StatelessWidget {
                 return const SizedBox(height: 22);
               }
 
-              return _buildStatusChip(colors, snapshot.data!);
+              return _buildStatusChip(
+                colors,
+                snapshot.data!,
+              );
             },
           ),
-        if (isToday) const SizedBox(height: 7),
+
+        if (isToday)
+          const SizedBox(height: 7),
+
+        // اسم الحصة
         Text(
           schedule.lessonTitle.trim().isEmpty
               ? 'درس بدون عنوان'
@@ -150,11 +168,18 @@ class ScheduleCard extends StatelessWidget {
             color: colors.onSurface,
           ),
         ),
+
         const SizedBox(height: 6),
+
+        // المجموعة
         if (group != null) ...[
           Row(
             children: [
-              Icon(Icons.groups_outlined, size: 13, color: colors.primary),
+              Icon(
+                Icons.groups_outlined,
+                size: 13,
+                color: colors.primary,
+              ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
@@ -170,7 +195,9 @@ class ScheduleCard extends StatelessWidget {
               ),
             ],
           ),
-          if (group!.grade.trim().isNotEmpty)
+
+          // الصف الدراسي تابع للحصة وليس للمجموعة
+          if (schedule.grade.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 3),
               child: Row(
@@ -183,7 +210,7 @@ class ScheduleCard extends StatelessWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      group!.grade,
+                      schedule.grade,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -196,7 +223,7 @@ class ScheduleCard extends StatelessWidget {
                 ],
               ),
             ),
-        ] else
+        ] else ...[
           Row(
             children: [
               Icon(
@@ -219,11 +246,43 @@ class ScheduleCard extends StatelessWidget {
               ),
             ],
           ),
+
+          // حتى لو مفيش مجموعة، الصف يفضل تابع للحصة
+          if (schedule.grade.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.school_outlined,
+                    size: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      schedule.grade,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }
 
-  Widget _buildStatusChip(ColorScheme colors, ClassStatus status) {
+  Widget _buildStatusChip(
+      ColorScheme colors,
+      ClassStatus status,
+      ) {
     late final Color color;
     late final IconData icon;
     late final String text;
@@ -249,7 +308,10 @@ class ScheduleCard extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.09),
         borderRadius: BorderRadius.circular(8),
@@ -257,7 +319,11 @@ class ScheduleCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
+          Icon(
+            icon,
+            size: 12,
+            color: color,
+          ),
           const SizedBox(width: 4),
           Text(
             text,
@@ -272,17 +338,24 @@ class ScheduleCard extends StatelessWidget {
     );
   }
 
-  Widget _buildTrailing(BuildContext context, ColorScheme colors) {
+  Widget _buildTrailing(
+      BuildContext context,
+      ColorScheme colors,
+      ) {
     if (_hasActions) {
       return PopupMenuButton<String>(
         padding: EdgeInsets.zero,
         tooltip: 'خيارات الحصة',
-        icon: Icon(Icons.more_vert_rounded, color: colors.onSurfaceVariant),
+        icon: Icon(
+          Icons.more_vert_rounded,
+          color: colors.onSurfaceVariant,
+        ),
         onSelected: (value) {
           switch (value) {
             case 'edit':
               onEdit?.call();
               break;
+
             case 'delete':
               onDelete?.call();
               break;
@@ -295,7 +368,10 @@ class ScheduleCard extends StatelessWidget {
                 value: 'edit',
                 child: Row(
                   children: [
-                    Icon(Icons.edit_outlined, size: 18),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: 18,
+                    ),
                     SizedBox(width: 10),
                     Text('تعديل'),
                   ],
