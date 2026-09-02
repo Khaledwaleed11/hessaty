@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
-import 'package:file_save_directory/file_save_directory.dart';
 import '../models/exam_model.dart';
 import '../models/exam_student_model.dart';
 import '../models/group_model.dart';
 import '../models/class_schedule_model.dart';
-import 'dart:typed_data';
 import '../services/exam_student_service.dart';
 import '../services/exam_pdf_service.dart';
 import '../services/group_service.dart';
@@ -249,25 +248,35 @@ class _ExamDetailsScreenState extends State<ExamDetailsScreen> {
     try {
       final fileName = _getPdfFileName();
 
-      await FileSaveDirectory.instance.saveFile(
-        fileName: fileName,
-        fileBytes: pdfBytes,
-        location: SaveLocation.downloads,
-        openAfterSave: false,
+      final uri = await const MethodChannel(
+        'hessaty/download',
+      ).invokeMethod<String>(
+        'savePdf',
+        {
+          'fileName': fileName,
+          'bytes': Uint8List.fromList(pdfBytes),
+        },
       );
 
       if (!mounted) return;
 
-      _showMessage(
-        'تم حفظ ملف PDF في مجلد Downloads',
-      );
+      if (uri != null) {
+        _showMessage(
+          'تم حفظ ملف PDF في مجلد Downloads',
+        );
+      } else {
+        _showMessage(
+          'تعذر حفظ ملف PDF',
+          isError: true,
+        );
+      }
     } catch (e) {
-      if (!mounted) return;
-
       debugPrint('PDF DOWNLOAD ERROR: $e');
 
+      if (!mounted) return;
+
       _showMessage(
-        'حدث خطأ أثناء تنزيل الملف',
+        'حدث خطأ أثناء تنزيل ملف PDF',
         isError: true,
       );
     }
