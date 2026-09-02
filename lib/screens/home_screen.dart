@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/class_schedule_model.dart';
+import '../models/exam_model.dart';
 import '../models/group_model.dart';
 import '../models/student_model.dart';
+import '../services/exam_service.dart';
 import '../services/group_service.dart';
 import '../services/schedule_service.dart';
 import '../services/student_service.dart';
@@ -15,6 +17,7 @@ import '../widgets/section_header.dart';
 import '../widgets/stat_card.dart';
 import 'attendance_history_screen.dart';
 import 'attendance_screen.dart';
+import 'exams_screen.dart';
 import 'groups_screen.dart';
 import 'schedule_screen.dart';
 import 'students_screen.dart';
@@ -30,15 +33,19 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ClassScheduleModel> _todaySchedules = [];
   List<GroupModel> _groups = [];
   List<StudentModel> _students = [];
+  List<ExamModel> _exams = [];
 
   bool _isLoading = true;
+
   Timer? _statusTimer;
+
   late final Box _groupsBox;
   late final Box _studentsBox;
   late final Box _schedulesBox;
+  late final Box _examsBox;
 
   int get _uniqueGroupCount {
-    return _groups.map((group) => group.weekday).toSet().length;
+    return _groups.map((group) => group.id).toSet().length;
   }
 
   int get _completedClassesToday {
@@ -65,10 +72,77 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   int get _remainingClassesToday {
-    final remaining = _todaySchedules.length - _completedClassesToday;
+    final remaining =
+        _todaySchedules.length - _completedClassesToday;
 
     return remaining < 0 ? 0 : remaining;
   }
+
+  // =========================
+  // Navigation
+  // =========================
+
+  void _openSchedule() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ScheduleScreen(),
+      ),
+    );
+  }
+
+  void _openStudents() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const StudentsScreen(),
+      ),
+    );
+  }
+
+  void _openGroups() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const GroupsScreen(),
+      ),
+    );
+  }
+
+  void _openExams() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ExamsScreen(),
+      ),
+    );
+  }
+
+  void _openAttendance(
+      ClassScheduleModel schedule,
+      ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AttendanceScreen(
+          schedule: schedule,
+        ),
+      ),
+    );
+  }
+
+  void _openAttendanceHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AttendanceHistoryScreen(),
+      ),
+    );
+  }
+
+  // =========================
+  // Init
+  // =========================
 
   @override
   void initState() {
@@ -77,10 +151,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _groupsBox = Hive.box('groups');
     _studentsBox = Hive.box('students');
     _schedulesBox = Hive.box('schedules');
+    _examsBox = Hive.box('exams');
 
     _groupsBox.listenable().addListener(_onHiveChanged);
     _studentsBox.listenable().addListener(_onHiveChanged);
     _schedulesBox.listenable().addListener(_onHiveChanged);
+    _examsBox.listenable().addListener(_onHiveChanged);
 
     _loadDashboard();
 
@@ -104,9 +180,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadDashboard();
   }
 
+  // =========================
+  // Dashboard Loading
+  // =========================
+
   Future<void> _loadDashboard() async {
     try {
-      if (_todaySchedules.isEmpty && _groups.isEmpty && _students.isEmpty) {
+      if (_todaySchedules.isEmpty &&
+          _groups.isEmpty &&
+          _students.isEmpty &&
+          _exams.isEmpty) {
         if (mounted) {
           setState(() {
             _isLoading = true;
@@ -114,12 +197,15 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      final today = _hessatyWeekday(DateTime.now());
+      final today = _hessatyWeekday(
+        DateTime.now(),
+      );
 
       final results = await Future.wait([
         ScheduleService.getSchedulesByDay(today),
         GroupService.getGroups(),
         StudentService.getStudents(),
+        ExamService.getExams(),
       ]);
 
       if (!mounted) {
@@ -127,9 +213,18 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       setState(() {
-        _todaySchedules = results[0] as List<ClassScheduleModel>;
-        _groups = results[1] as List<GroupModel>;
-        _students = results[2] as List<StudentModel>;
+        _todaySchedules =
+        results[0] as List<ClassScheduleModel>;
+
+        _groups =
+        results[1] as List<GroupModel>;
+
+        _students =
+        results[2] as List<StudentModel>;
+
+        _exams =
+        results[3] as List<ExamModel>;
+
         _isLoading = false;
       });
     } catch (_) {
@@ -141,40 +236,59 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context)
+          .hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('تعذر تحميل بيانات الرئيسية.'),
+          content: Text(
+            'تعذر تحميل بيانات الرئيسية.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  static int _hessatyWeekday(DateTime date) {
+  // =========================
+  // Helpers
+  // =========================
+
+  static int _hessatyWeekday(
+      DateTime date,
+      ) {
     switch (date.weekday) {
       case DateTime.saturday:
         return 1;
+
       case DateTime.sunday:
         return 2;
+
       case DateTime.monday:
         return 3;
+
       case DateTime.tuesday:
         return 4;
+
       case DateTime.wednesday:
         return 5;
+
       case DateTime.thursday:
         return 6;
+
       case DateTime.friday:
         return 7;
+
       default:
         return 1;
     }
   }
 
-  TimeOfDay? _parseTime(String value) {
-    final cleaned = value.trim().toUpperCase();
+  TimeOfDay? _parseTime(
+      String value,
+      ) {
+    final cleaned =
+    value.trim().toUpperCase();
 
     final match = RegExp(
       r'^(\d{1,2}):(\d{2})\s*(AM|PM|ص|م)?$',
@@ -184,26 +298,40 @@ class _HomeScreenState extends State<HomeScreen> {
       return null;
     }
 
-    var hour = int.tryParse(match.group(1) ?? '') ?? 0;
-    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    var hour =
+        int.tryParse(match.group(1) ?? '') ?? 0;
+
+    final minute =
+        int.tryParse(match.group(2) ?? '') ?? 0;
+
     final period = match.group(3);
 
-    if ((period == 'AM' || period == 'ص') && hour == 12) {
+    if ((period == 'AM' || period == 'ص') &&
+        hour == 12) {
       hour = 0;
     }
 
-    if ((period == 'PM' || period == 'م') && hour != 12) {
+    if ((period == 'PM' || period == 'م') &&
+        hour != 12) {
       hour += 12;
     }
 
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    if (hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
       return null;
     }
 
-    return TimeOfDay(hour: hour, minute: minute);
+    return TimeOfDay(
+      hour: hour,
+      minute: minute,
+    );
   }
 
-  GroupModel? _getGroup(String groupId) {
+  GroupModel? _getGroup(
+      String groupId,
+      ) {
     for (final group in _groups) {
       if (group.id == groupId) {
         return group;
@@ -238,7 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
       'الجمعة',
     ];
 
-    return days[_hessatyWeekday(DateTime.now()) - 1];
+    return days[
+    _hessatyWeekday(DateTime.now()) - 1];
   }
 
   String _formatTodayDate() {
@@ -247,7 +376,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${now.day} ${_monthName(now.month)} ${now.year}';
   }
 
-  String _monthName(int month) {
+  String _monthName(
+      int month,
+      ) {
     const months = [
       'يناير',
       'فبراير',
@@ -263,78 +394,75 @@ class _HomeScreenState extends State<HomeScreen> {
       'ديسمبر',
     ];
 
-    if (month < 1 || month > months.length) {
+    if (month < 1 ||
+        month > months.length) {
       return '';
     }
 
     return months[month - 1];
   }
 
-  void _openSchedule() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ScheduleScreen()),
-    );
-  }
+  // =========================
+  // Dispose
+  // =========================
 
-  void _openStudents() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const StudentsScreen()),
-    );
-  }
-
-  void _openGroups() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const GroupsScreen()),
-    );
-  }
-
-  void _openAttendance(ClassScheduleModel schedule) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => AttendanceScreen(schedule: schedule)),
-    );
-  }
-
-  void _openAttendanceHistory() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AttendanceHistoryScreen()),
-    );
-  }
   @override
   void dispose() {
     _statusTimer?.cancel();
 
-    _groupsBox.listenable().removeListener(_onHiveChanged);
-    _studentsBox.listenable().removeListener(_onHiveChanged);
-    _schedulesBox.listenable().removeListener(_onHiveChanged);
+    _groupsBox.listenable()
+        .removeListener(_onHiveChanged);
+
+    _studentsBox.listenable()
+        .removeListener(_onHiveChanged);
+
+    _schedulesBox.listenable()
+        .removeListener(_onHiveChanged);
+
+    _examsBox.listenable()
+        .removeListener(_onHiveChanged);
 
     super.dispose();
   }
 
+  // =========================
+  // Build
+  // =========================
+
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+  Widget build(
+      BuildContext context,
+      ) {
+    final colors =
+        Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
+      backgroundColor:
+      colors.surfaceContainerLowest,
       body: SafeArea(
         child: RefreshIndicator(
           color: colors.primary,
           backgroundColor: colors.surface,
           onRefresh: _loadDashboard,
           child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
+            physics:
+            const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
+                padding:
+                const EdgeInsets.fromLTRB(
+                  18,
+                  16,
+                  18,
+                  30,
+                ),
                 sliver: SliverToBoxAdapter(
-                  child: _buildContent(context, colors),
+                  child: _buildContent(
+                    context,
+                    colors,
+                  ),
                 ),
               ),
             ],
@@ -344,30 +472,53 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildContent(BuildContext context, ColorScheme colors) {
+  Widget _buildContent(
+      BuildContext context,
+      ColorScheme colors,
+      ) {
     if (_isLoading) {
       return const Column(
-        children: [LoadingCard(type: LoadingCardType.schedule, itemCount: 3)],
+        children: [
+          LoadingCard(
+            type: LoadingCardType.schedule,
+            itemCount: 3,
+          ),
+        ],
       );
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment:
+      CrossAxisAlignment.stretch,
       children: [
         _buildHeader(colors),
+
         const SizedBox(height: 16),
+
         _buildTodayHero(colors),
+
         const SizedBox(height: 18),
+
         _buildOverview(colors),
+
         const SizedBox(height: 28),
+
         _buildTodaySection(colors),
+
         const SizedBox(height: 28),
+
         _buildQuickAccess(colors),
       ],
     );
   }
 
-  Widget _buildHeader(ColorScheme colors) {
+  // =========================
+  // Header
+  // =========================
+
+  Widget _buildHeader(
+      ColorScheme colors,
+      ) {
     return Row(
       children: [
         Container(
@@ -379,39 +530,57 @@ class _HomeScreenState extends State<HomeScreen> {
               end: Alignment.bottomRight,
               colors: [
                 colors.primary,
-                Color.lerp(colors.primary, colors.primaryContainer, 0.55)!,
+                Color.lerp(
+                  colors.primary,
+                  colors.primaryContainer,
+                  0.55,
+                )!,
               ],
             ),
-            borderRadius: BorderRadius.circular(17),
+            borderRadius:
+            BorderRadius.circular(17),
             boxShadow: [
               BoxShadow(
-                color: colors.primary.withValues(alpha: 0.20),
+                color: colors.primary
+                    .withValues(alpha: 0.20),
                 blurRadius: 18,
                 offset: const Offset(0, 7),
               ),
             ],
           ),
-          child: Icon(Icons.school_rounded, size: 26, color: colors.onPrimary),
+          child: Icon(
+            Icons.school_rounded,
+            size: 26,
+            color: colors.onPrimary,
+          ),
         ),
+
         const SizedBox(width: 12),
+
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+            CrossAxisAlignment.start,
             children: [
               Text(
                 'حصتي',
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: colors.onSurfaceVariant,
+                  fontWeight:
+                  FontWeight.w700,
+                  color:
+                  colors.onSurfaceVariant,
                 ),
               ),
+
               const SizedBox(height: 2),
+
               Text(
                 _getGreeting(),
                 style: TextStyle(
                   fontSize: 21,
-                  fontWeight: FontWeight.w900,
+                  fontWeight:
+                  FontWeight.w900,
                   color: colors.onSurface,
                   height: 1.1,
                 ),
@@ -419,22 +588,27 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+
         Material(
           color: colors.surface,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius:
+          BorderRadius.circular(15),
           child: InkWell(
             onTap: () {},
-            borderRadius: BorderRadius.circular(15),
+            borderRadius:
+            BorderRadius.circular(15),
             child: Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius:
+                BorderRadius.circular(15),
                 border: Border.all(
-                  color: colors.outlineVariant.withValues(alpha: 0.30),
+                  color: colors
+                      .outlineVariant
+                      .withValues(alpha: 0.30),
                 ),
               ),
-
             ),
           ),
         ),
@@ -442,8 +616,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTodayHero(ColorScheme colors) {
-    final hasClasses = _todaySchedules.isNotEmpty;
+  // =========================
+  // Today Hero
+  // =========================
+
+  Widget _buildTodayHero(
+      ColorScheme colors,
+      ) {
+    final hasClasses =
+        _todaySchedules.isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -454,46 +635,64 @@ class _HomeScreenState extends State<HomeScreen> {
           end: Alignment.bottomLeft,
           colors: [
             colors.primary,
-            Color.lerp(colors.primary, colors.primaryContainer, 0.38)!,
+            Color.lerp(
+              colors.primary,
+              colors.primaryContainer,
+              0.38,
+            )!,
           ],
         ),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius:
+        BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
-            color: colors.primary.withValues(alpha: 0.18),
+            color: colors.primary
+                .withValues(alpha: 0.18),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment:
+        CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   children: [
                     Text(
                       _formatTodayDate(),
                       style: TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: colors.onPrimary.withValues(alpha: 0.78),
+                        fontWeight:
+                        FontWeight.w700,
+                        color: colors.onPrimary
+                            .withValues(
+                          alpha: 0.78,
+                        ),
                       ),
                     ),
+
                     const SizedBox(height: 5),
+
                     Text(
                       'خطة يوم ${_getTodayName()}',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: colors.onPrimary,
+                        fontWeight:
+                        FontWeight.w900,
+                        color:
+                        colors.onPrimary,
                         height: 1.1,
                       ),
                     ),
+
                     const SizedBox(height: 7),
+
                     Text(
                       hasClasses
                           ? 'عندك ${_todaySchedules.length} ${_todaySchedules.length == 1 ? 'حصة' : 'حصص'} النهارده.'
@@ -501,54 +700,79 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.4,
-                        color: colors.onPrimary.withValues(alpha: 0.80),
+                        color: colors
+                            .onPrimary
+                            .withValues(
+                          alpha: 0.80,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+
               const SizedBox(width: 12),
+
               Container(
                 width: 62,
                 height: 62,
                 decoration: BoxDecoration(
-                  color: colors.onPrimary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
+                  color: colors.onPrimary
+                      .withValues(alpha: 0.12),
+                  borderRadius:
+                  BorderRadius.circular(20),
                   border: Border.all(
-                    color: colors.onPrimary.withValues(alpha: 0.10),
+                    color: colors.onPrimary
+                        .withValues(
+                      alpha: 0.10,
+                    ),
                   ),
                 ),
                 child: Icon(
                   hasClasses
-                      ? Icons.event_available_rounded
-                      : Icons.free_breakfast_rounded,
+                      ? Icons
+                      .event_available_rounded
+                      : Icons
+                      .free_breakfast_rounded,
                   color: colors.onPrimary,
                   size: 30,
                 ),
               ),
             ],
           ),
+
           const SizedBox(height: 18),
+
           Row(
             children: [
               _buildHeroMetric(
                 colors,
-                icon: Icons.calendar_today_rounded,
-                value: '${_todaySchedules.length}',
+                icon:
+                Icons.calendar_today_rounded,
+                value:
+                '${_todaySchedules.length}',
                 label: 'الحصص',
               ),
+
               const SizedBox(width: 8),
+
               _buildHeroMetric(
                 colors,
-                icon: Icons.check_circle_outline_rounded,
-                value: '$_completedClassesToday',
+                icon: Icons
+                    .check_circle_outline_rounded,
+                value:
+                '$_completedClassesToday',
                 label: 'انتهت',
               ),
+
               const SizedBox(width: 8),
+
               _buildHeroMetric(
                 colors,
-                icon: Icons.timelapse_rounded,
-                value: '$_remainingClassesToday',
+                icon:
+                Icons.timelapse_rounded,
+                value:
+                '$_remainingClassesToday',
                 label: 'متبقية',
               ),
             ],
@@ -559,41 +783,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeroMetric(
-    ColorScheme colors, {
-    required IconData icon,
-    required String value,
-    required String label,
-  }) {
+      ColorScheme colors, {
+        required IconData icon,
+        required String value,
+        required String label,
+      }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        padding:
+        const EdgeInsets.symmetric(
+          horizontal: 8,
+          vertical: 10,
+        ),
         decoration: BoxDecoration(
-          color: colors.onPrimary.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(14),
+          color: colors.onPrimary
+              .withValues(alpha: 0.10),
+          borderRadius:
+          BorderRadius.circular(14),
         ),
         child: Column(
           children: [
             Icon(
               icon,
               size: 16,
-              color: colors.onPrimary.withValues(alpha: 0.90),
+              color: colors.onPrimary
+                  .withValues(alpha: 0.90),
             ),
+
             const SizedBox(height: 4),
+
             Text(
               value,
               style: TextStyle(
                 fontSize: 15,
-                fontWeight: FontWeight.w900,
+                fontWeight:
+                FontWeight.w900,
                 color: colors.onPrimary,
               ),
             ),
+
             const SizedBox(height: 2),
+
             Text(
               label,
               style: TextStyle(
                 fontSize: 8,
-                fontWeight: FontWeight.w700,
-                color: colors.onPrimary.withValues(alpha: 0.72),
+                fontWeight:
+                FontWeight.w700,
+                color: colors.onPrimary
+                    .withValues(alpha: 0.72),
               ),
             ),
           ],
@@ -602,56 +840,79 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildOverview(ColorScheme colors) {
+  // =========================
+  // Overview
+  // =========================
+
+  Widget _buildOverview(
+      ColorScheme colors,
+      ) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment:
+      CrossAxisAlignment.stretch,
       children: [
         Text(
           'نظرة سريعة',
           textAlign: TextAlign.right,
           style: TextStyle(
             fontSize: 15,
-            fontWeight: FontWeight.w900,
+            fontWeight:
+            FontWeight.w900,
             color: colors.onSurface,
           ),
         ),
+
         const SizedBox(height: 10),
+
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+          physics:
+          const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.48,
           children: [
             StatCard(
               title: 'حصص اليوم',
-              value: '${_todaySchedules.length}',
-              subtitle: 'الحصص المجدولة',
-              icon: Icons.calendar_today_rounded,
+              value:
+              '${_todaySchedules.length}',
+              subtitle:
+              'الحصص المجدولة',
+              icon:
+              Icons.calendar_today_rounded,
               onTap: _openSchedule,
             ),
+
             StatCard(
               title: 'الطلاب',
-              value: '${_students.length}',
-              subtitle: 'الطلاب المسجلون',
+              value:
+              '${_students.length}',
+              subtitle:
+              'الطلاب المسجلون',
               icon: Icons.groups_rounded,
               onTap: _openStudents,
             ),
+
             StatCard(
               title: 'المجموعات',
-              value: '$_uniqueGroupCount',
-              subtitle: 'أيام الدراسة',
+              value:
+              '$_uniqueGroupCount',
+              subtitle:
+              'أيام الدراسة',
               icon: Icons.class_rounded,
               onTap: _openGroups,
             ),
+
             StatCard(
-              title: 'الحالة',
-              value: _todaySchedules.isEmpty ? 'راحة' : 'نشاط',
-              subtitle: _todaySchedules.isEmpty ? 'يوم هادئ' : 'اليوم عندك حصص',
-              icon: _todaySchedules.isEmpty
-                  ? Icons.self_improvement_rounded
-                  : Icons.bolt_rounded,
+              title: 'الامتحانات',
+              value:
+              '${_exams.length}',
+              subtitle:
+              'الامتحانات المسجلة',
+              icon:
+              Icons.assignment_rounded,
+              onTap: _openExams,
             ),
           ],
         ),
@@ -659,45 +920,74 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTodaySection(ColorScheme colors) {
+  // =========================
+  // Today Section
+  // =========================
+
+  Widget _buildTodaySection(
+      ColorScheme colors,
+      ) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment:
+      CrossAxisAlignment.stretch,
       children: [
         SectionHeader(
           title: 'حصص اليوم',
           subtitle:
-              '${_getTodayName()} • ${_todaySchedules.length} ${_todaySchedules.length == 1 ? 'حصة' : 'حصص'}',
+          '${_getTodayName()} • ${_todaySchedules.length} ${_todaySchedules.length == 1 ? 'حصة' : 'حصص'}',
           actionText: 'عرض الكل',
           onAction: _openSchedule,
         ),
+
         const SizedBox(height: 12),
+
         if (_todaySchedules.isEmpty)
           _buildNoClasses(colors)
         else
-          ..._todaySchedules.take(4).map((schedule) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: ScheduleCard(
-                schedule: schedule,
-                group: _getGroup(schedule.groupId),
-                isToday: true,
-                onTap: () => _openAttendance(schedule),
-              ),
-            );
-          }),
+          ..._todaySchedules.take(4).map(
+                (schedule) {
+              return Padding(
+                padding:
+                const EdgeInsets.only(
+                  bottom: 10,
+                ),
+                child: ScheduleCard(
+                  schedule: schedule,
+                  group: _getGroup(
+                    schedule.groupId,
+                  ),
+                  isToday: true,
+                  onTap: () =>
+                      _openAttendance(
+                        schedule,
+                      ),
+                ),
+              );
+            },
+          ),
       ],
     );
   }
 
-  Widget _buildNoClasses(ColorScheme colors) {
+  Widget _buildNoClasses(
+      ColorScheme colors,
+      ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+      padding:
+      const EdgeInsets.fromLTRB(
+        22,
+        24,
+        22,
+        24,
+      ),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius:
+        BorderRadius.circular(22),
         border: Border.all(
-          color: colors.outlineVariant.withValues(alpha: 0.30),
+          color: colors.outlineVariant
+              .withValues(alpha: 0.30),
         ),
       ),
       child: Column(
@@ -706,7 +996,8 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 68,
             height: 68,
             decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: 0.08),
+              color: colors.primary
+                  .withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -715,80 +1006,116 @@ class _HomeScreenState extends State<HomeScreen> {
               color: colors.primary,
             ),
           ),
+
           const SizedBox(height: 14),
+
           Text(
             'اليوم فاضي 🎉',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+              FontWeight.w900,
               color: colors.onSurface,
             ),
           ),
+
           const SizedBox(height: 5),
+
           Text(
             'مفيش حصص مجدولة النهارده. ممكن تستغل الوقت في مراجعة الجدول أو بيانات الطلاب.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 10,
               height: 1.55,
-              color: colors.onSurfaceVariant,
+              color:
+              colors.onSurfaceVariant,
             ),
           ),
+
           const SizedBox(height: 15),
+
           OutlinedButton.icon(
             onPressed: _openSchedule,
-            icon: const Icon(Icons.calendar_month_rounded, size: 17),
-            label: const Text('فتح الجدول'),
+            icon: const Icon(
+              Icons.calendar_month_rounded,
+              size: 17,
+            ),
+            label:
+            const Text('فتح الجدول'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildQuickAccess(ColorScheme colors) {
+  // =========================
+  // Quick Access
+  // =========================
+
+  Widget _buildQuickAccess(
+      ColorScheme colors,
+      ) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment:
+      CrossAxisAlignment.stretch,
       children: [
         Text(
           'الوصول السريع',
           textAlign: TextAlign.right,
           style: TextStyle(
             fontSize: 15,
-            fontWeight: FontWeight.w900,
+            fontWeight:
+            FontWeight.w900,
             color: colors.onSurface,
           ),
         ),
+
         const SizedBox(height: 4),
+
         Text(
           'كل الأدوات المهمة في مكان واحد',
           textAlign: TextAlign.right,
-          style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+          style: TextStyle(
+            fontSize: 10,
+            color: colors.onSurfaceVariant,
+          ),
         ),
+
         const SizedBox(height: 12),
+
+        // الصف الأول
         Row(
           children: [
             Expanded(
               child: _buildQuickAction(
                 colors,
-                icon: Icons.calendar_month_rounded,
+                icon:
+                Icons.calendar_month_rounded,
                 title: 'الجدول',
-                subtitle: 'الحصص الأسبوعية',
+                subtitle:
+                'الحصص الأسبوعية',
                 onTap: _openSchedule,
               ),
             ),
+
             const SizedBox(width: 10),
+
             Expanded(
               child: _buildQuickAction(
                 colors,
                 icon: Icons.groups_rounded,
                 title: 'الطلاب',
-                subtitle: '${_students.length} طالب مسجل',
+                subtitle:
+                '${_students.length} طالب مسجل',
                 onTap: _openStudents,
               ),
             ),
           ],
         ),
+
         const SizedBox(height: 10),
+
+        // الصف الثاني
         Row(
           children: [
             Expanded(
@@ -796,52 +1123,238 @@ class _HomeScreenState extends State<HomeScreen> {
                 colors,
                 icon: Icons.class_rounded,
                 title: 'المجموعات',
-                subtitle: '${_uniqueGroupCount} مجموعات',
+                subtitle:
+                '${_uniqueGroupCount} مجموعات',
                 onTap: _openGroups,
               ),
             ),
+
             const SizedBox(width: 10),
+
             Expanded(
               child: _buildQuickAction(
                 colors,
-                icon: Icons.fact_check_rounded,
+                icon:
+                Icons.fact_check_rounded,
                 title: 'الحضور',
-                subtitle: _todaySchedules.isEmpty
+                subtitle:
+                _todaySchedules.isEmpty
                     ? 'لا توجد حصة اليوم'
                     : 'ابدأ تسجيل الحضور',
-                onTap: _todaySchedules.isEmpty
+                onTap:
+                _todaySchedules.isEmpty
                     ? null
-                    : () => _openAttendance(_todaySchedules.first),
+                    : () =>
+                    _openAttendance(
+                      _todaySchedules
+                          .first,
+                    ),
               ),
             ),
           ],
         ),
+
         const SizedBox(height: 10),
-        _buildAttendanceHistoryAction(colors),
+
+        // 📝 الامتحانات
+        _buildExamAction(colors),
+
+        const SizedBox(height: 10),
+
+        // سجل الحضور
+        _buildAttendanceHistoryAction(
+          colors,
+        ),
       ],
     );
   }
 
-  Widget _buildAttendanceHistoryAction(ColorScheme colors) {
+  // =========================
+  // Exam Action
+  // =========================
+
+  Widget _buildExamAction(
+      ColorScheme colors,
+      ) {
+    return Material(
+      color: colors.surface,
+      borderRadius:
+      BorderRadius.circular(20),
+      child: InkWell(
+        onTap: _openExams,
+        borderRadius:
+        BorderRadius.circular(20),
+        child: Container(
+          width: double.infinity,
+          height: 92,
+          padding:
+          const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+          decoration: BoxDecoration(
+            borderRadius:
+            BorderRadius.circular(20),
+            border: Border.all(
+              color: colors.primary
+                  .withValues(alpha: 0.18),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.primary
+                    .withValues(alpha: 0.04),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient:
+                  LinearGradient(
+                    begin:
+                    Alignment.topLeft,
+                    end:
+                    Alignment.bottomRight,
+                    colors: [
+                      colors.primary
+                          .withValues(
+                        alpha: 0.14,
+                      ),
+                      colors.primary
+                          .withValues(
+                        alpha: 0.07,
+                      ),
+                    ],
+                  ),
+                  borderRadius:
+                  BorderRadius.circular(
+                    15,
+                  ),
+                ),
+                child: Icon(
+                  Icons.assignment_rounded,
+                  size: 23,
+                  color: colors.primary,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  mainAxisAlignment:
+                  MainAxisAlignment.center,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'الامتحانات',
+                      maxLines: 1,
+                      overflow:
+                      TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                        FontWeight.w900,
+                        color:
+                        colors.onSurface,
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    Text(
+                      _exams.isEmpty
+                          ? 'أنشئ أول امتحان للمجموعة'
+                          : '${_exams.length} امتحان مسجل • إدارة النتائج والدرجات',
+                      maxLines: 1,
+                      overflow:
+                      TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight:
+                        FontWeight.w600,
+                        color: colors
+                            .onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: colors.primary
+                      .withValues(
+                    alpha: 0.07,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons
+                      .arrow_forward_ios_rounded,
+                  size: 12,
+                  color: colors.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // Attendance History
+  // =========================
+
+  Widget _buildAttendanceHistoryAction(
+      ColorScheme colors,
+      ) {
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 180),
+      duration:
+      const Duration(milliseconds: 180),
       opacity: 1,
       child: Material(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+        BorderRadius.circular(20),
         child: InkWell(
           onTap: _openAttendanceHistory,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius:
+          BorderRadius.circular(20),
           child: Container(
             width: double.infinity,
             height: 92,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding:
+            const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: colors.primary.withValues(alpha: 0.18)),
+              borderRadius:
+              BorderRadius.circular(20),
+              border: Border.all(
+                color: colors.primary
+                    .withValues(
+                  alpha: 0.18,
+                ),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: colors.primary.withValues(alpha: 0.04),
+                  color: colors.primary
+                      .withValues(
+                    alpha: 0.04,
+                  ),
                   blurRadius: 14,
                   offset: const Offset(0, 5),
                 ),
@@ -852,63 +1365,96 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   width: 48,
                   height: 48,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                  decoration:
+                  BoxDecoration(
+                    gradient:
+                    LinearGradient(
+                      begin:
+                      Alignment.topLeft,
+                      end:
+                      Alignment.bottomRight,
                       colors: [
-                        colors.primary.withValues(alpha: 0.14),
-                        colors.primary.withValues(alpha: 0.07),
+                        colors.primary
+                            .withValues(
+                          alpha: 0.14,
+                        ),
+                        colors.primary
+                            .withValues(
+                          alpha: 0.07,
+                        ),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius:
+                    BorderRadius.circular(
+                      15,
+                    ),
                   ),
                   child: Icon(
-                    Icons.fact_check_rounded,
+                    Icons
+                        .fact_check_rounded,
                     size: 23,
                     color: colors.primary,
                   ),
                 ),
+
                 const SizedBox(width: 12),
+
                 Expanded(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment:
+                    MainAxisAlignment.center,
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
                     children: [
                       Text(
                         'سجل الحضور والغياب',
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        overflow:
+                        TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          color: colors.onSurface,
+                          fontWeight:
+                          FontWeight.w900,
+                          color:
+                          colors.onSurface,
                         ),
                       ),
+
                       const SizedBox(height: 4),
+
                       Text(
                         'راجع سجل حضور الطلاب ونسب الغياب',
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        overflow:
+                        TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: colors.onSurfaceVariant,
+                          fontWeight:
+                          FontWeight.w600,
+                          color: colors
+                              .onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
+
                 const SizedBox(width: 8),
+
                 Container(
                   width: 34,
                   height: 34,
-                  decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: 0.07),
+                  decoration:
+                  BoxDecoration(
+                    color: colors.primary
+                        .withValues(
+                      alpha: 0.07,
+                    ),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    Icons.arrow_forward_ios_rounded,
+                    Icons
+                        .arrow_forward_ios_rounded,
                     size: 12,
                     color: colors.primary,
                   ),
@@ -921,70 +1467,105 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // =========================
+  // Quick Action Card
+  // =========================
+
   Widget _buildQuickAction(
-    ColorScheme colors, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback? onTap,
-  }) {
+      ColorScheme colors, {
+        required IconData icon,
+        required String title,
+        required String subtitle,
+        required VoidCallback? onTap,
+      }) {
     final enabled = onTap != null;
 
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 180),
+      duration:
+      const Duration(milliseconds: 180),
       opacity: enabled ? 1 : 0.55,
       child: Material(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+        BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius:
+          BorderRadius.circular(20),
           child: Container(
             height: 124,
-            padding: const EdgeInsets.all(15),
+            padding:
+            const EdgeInsets.all(15),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius:
+              BorderRadius.circular(20),
               border: Border.all(
-                color: colors.outlineVariant.withValues(alpha: 0.28),
+                color: colors
+                    .outlineVariant
+                    .withValues(alpha: 0.28),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: colors.shadow.withValues(alpha: 0.02),
+                  color: colors.shadow
+                      .withValues(
+                    alpha: 0.02,
+                  ),
                   blurRadius: 12,
                   offset: const Offset(0, 5),
                 ),
               ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 Container(
                   width: 44,
                   height: 44,
-                  decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: 0.09),
-                    borderRadius: BorderRadius.circular(14),
+                  decoration:
+                  BoxDecoration(
+                    color: colors.primary
+                        .withValues(
+                      alpha: 0.09,
+                    ),
+                    borderRadius:
+                    BorderRadius.circular(
+                      14,
+                    ),
                   ),
-                  child: Icon(icon, size: 21, color: colors.primary),
+                  child: Icon(
+                    icon,
+                    size: 21,
+                    color: colors.primary,
+                  ),
                 ),
+
                 const SizedBox(height: 12),
+
                 Text(
                   title,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: colors.onSurface,
+                    fontWeight:
+                    FontWeight.w900,
+                    color:
+                    colors.onSurface,
                   ),
                 ),
+
                 const SizedBox(height: 3),
+
                 Text(
                   subtitle,
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  overflow:
+                  TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: colors.onSurfaceVariant,
+                    fontWeight:
+                    FontWeight.w600,
+                    color: colors
+                        .onSurfaceVariant,
                   ),
                 ),
               ],

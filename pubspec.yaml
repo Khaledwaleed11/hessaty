@@ -17,6 +17,7 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   pdf: ^3.13.0
   printing: ^5.15.0
+  file_save_directory: ^1.0.5
 
 dev_dependencies:
   flutter_test:

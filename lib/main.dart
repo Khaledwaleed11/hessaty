@@ -15,6 +15,8 @@ Future<void> main() async {
   await Hive.openBox('schedules');
   await Hive.openBox('attendance');
   await Hive.openBox('settings');
+  await Hive.openBox('exams');
+  await Hive.openBox('exam_students');
 
   final settingsBox = Hive.box('settings');
 
