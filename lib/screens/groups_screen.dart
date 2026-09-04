@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
+import '../models/level_model.dart';
+import '../services/level_service.dart';
 import '../models/class_schedule_model.dart';
 import '../models/group_model.dart';
 import '../services/class_session_service.dart';
@@ -1802,10 +1803,13 @@ class _GroupDialogState extends State<_GroupDialog> {
 class _GroupScheduleDialog extends StatefulWidget {
   final GroupModel group;
 
-  const _GroupScheduleDialog({required this.group});
+  const _GroupScheduleDialog({
+    required this.group,
+  });
 
   @override
-  State<_GroupScheduleDialog> createState() => _GroupScheduleDialogState();
+  State<_GroupScheduleDialog> createState() =>
+      _GroupScheduleDialogState();
 }
 
 class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
@@ -1816,6 +1820,11 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
+  List<LevelModel> _levels = [];
+
+  String _selectedLevelId = '';
+
+  bool _isLoadingLevels = true;
   bool _isSaving = false;
 
   @override
@@ -1826,6 +1835,36 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
     _endTimeController = TextEditingController();
     _titleController = TextEditingController();
     _gradeController = TextEditingController();
+
+    _loadLevels();
+  }
+
+  Future<void> _loadLevels() async {
+    try {
+      final levels = await LevelService.getLevels();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _levels = levels;
+        _isLoadingLevels = false;
+
+        if (_levels.isNotEmpty) {
+          _selectedLevelId = _levels.first.id;
+        }
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _levels = [];
+        _isLoadingLevels = false;
+      });
+    }
   }
 
   @override
@@ -1849,39 +1888,56 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
       return null;
     }
 
-    var hour = int.tryParse(match.group(1) ?? '') ?? 0;
+    var hour =
+        int.tryParse(match.group(1) ?? '') ?? 0;
 
-    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    final minute =
+        int.tryParse(match.group(2) ?? '') ?? 0;
 
     final period = match.group(3);
 
-    if ((period == 'AM' || period == 'ص') && hour == 12) {
+    if ((period == 'AM' || period == 'ص') &&
+        hour == 12) {
       hour = 0;
     }
 
-    if ((period == 'PM' || period == 'م') && hour != 12) {
+    if ((period == 'PM' || period == 'م') &&
+        hour != 12) {
       hour += 12;
     }
 
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    if (hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
       return null;
     }
 
-    return TimeOfDay(hour: hour, minute: minute);
+    return TimeOfDay(
+      hour: hour,
+      minute: minute,
+    );
   }
 
   String _formatTime(TimeOfDay time) {
-    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final hour =
+    time.hourOfPeriod == 0
+        ? 12
+        : time.hourOfPeriod;
 
-    final minute = time.minute.toString().padLeft(2, '0');
+    final minute =
+    time.minute.toString().padLeft(2, '0');
 
-    final period = time.period == DayPeriod.am ? 'ص' : 'م';
+    final period =
+    time.period == DayPeriod.am ? 'ص' : 'م';
 
     return '$hour:$minute $period';
   }
 
   Future<void> _pickStartTime() async {
-    final initialTime = _parseTime(_timeController.text) ?? TimeOfDay.now();
+    final initialTime =
+        _parseTime(_timeController.text) ??
+            TimeOfDay.now();
 
     final pickedTime = await showTimePicker(
       context: context,
@@ -1898,21 +1954,23 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
     }
 
     setState(() {
-      _timeController.text = _formatTime(pickedTime);
+      _timeController.text =
+          _formatTime(pickedTime);
     });
   }
 
   Future<void> _pickEndTime() async {
-    final startTime = _parseTime(_timeController.text);
+    final startTime =
+    _parseTime(_timeController.text);
 
     final endInitialTime =
         _parseTime(_endTimeController.text) ??
-        (startTime == null
-            ? TimeOfDay.now()
-            : TimeOfDay(
-                hour: (startTime.hour + 1) % 24,
-                minute: startTime.minute,
-              ));
+            (startTime == null
+                ? TimeOfDay.now()
+                : TimeOfDay(
+              hour: (startTime.hour + 1) % 24,
+              minute: startTime.minute,
+            ));
 
     final pickedTime = await showTimePicker(
       context: context,
@@ -1929,8 +1987,19 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
     }
 
     setState(() {
-      _endTimeController.text = _formatTime(pickedTime);
+      _endTimeController.text =
+          _formatTime(pickedTime);
     });
+  }
+
+  LevelModel? get _selectedLevel {
+    for (final level in _levels) {
+      if (level.id == _selectedLevelId) {
+        return level;
+      }
+    }
+
+    return null;
   }
 
   Future<void> _saveSchedule() async {
@@ -1942,13 +2011,64 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
       return;
     }
 
-    final startTime = _timeController.text.trim();
+    if (_levels.isEmpty) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    final endTime = _endTimeController.text.trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'لا يوجد مستويات. أضف مستوى أولًا من الإعدادات.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
 
-    final title = _titleController.text.trim();
+      return;
+    }
 
-    final grade = _gradeController.text.trim();
+    if (_selectedLevelId.isEmpty) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'اختار مستوى الحصة.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      return;
+    }
+
+    final selectedLevel = _selectedLevel;
+
+    if (selectedLevel == null) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'المستوى المختار غير موجود.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      return;
+    }
+
+    final startTime =
+    _timeController.text.trim();
+
+    final endTime =
+    _endTimeController.text.trim();
+
+    final title =
+    _titleController.text.trim();
+
+    final grade =
+    _gradeController.text.trim();
 
     final start = _parseTime(startTime);
     final end = _parseTime(endTime);
@@ -1958,7 +2078,9 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('اختار وقت البداية والنهاية بشكل صحيح.'),
+          content: Text(
+            'اختار وقت البداية والنهاية بشكل صحيح.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1966,16 +2088,20 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
       return;
     }
 
-    final startMinutes = (start.hour * 60) + start.minute;
+    final startMinutes =
+        (start.hour * 60) + start.minute;
 
-    final endMinutes = (end.hour * 60) + end.minute;
+    final endMinutes =
+        (end.hour * 60) + end.minute;
 
     if (endMinutes <= startMinutes) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('وقت النهاية يجب أن يكون بعد وقت البداية.'),
+          content: Text(
+            'وقت النهاية يجب أن يكون بعد وقت البداية.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1989,16 +2115,29 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
 
     try {
       final schedule = ClassScheduleModel(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        id: DateTime.now()
+            .microsecondsSinceEpoch
+            .toString(),
+
         groupId: widget.group.id,
+
+        // المستوى بيتحدد للحصة هنا
+        levelId: selectedLevel.id,
+
         weekday: widget.group.weekday,
+
         startTime: startTime,
+
         endTime: endTime,
+
         lessonTitle: title,
+
         grade: grade,
       );
 
-      await ScheduleService.addSchedule(schedule);
+      await ScheduleService.addSchedule(
+        schedule,
+      );
 
       if (!mounted) {
         return;
@@ -2018,7 +2157,9 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('تعذر حفظ الحصة.'),
+          content: Text(
+            'تعذر حفظ الحصة.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -2027,22 +2168,34 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final colors =
+        Theme.of(context).colorScheme;
+
+    final selectedLevel =
+        _selectedLevel;
 
     return AlertDialog(
       backgroundColor: colors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-      titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
-      contentPadding: const EdgeInsets.fromLTRB(22, 16, 22, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(18, 6, 18, 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(26),
+      ),
+      titlePadding:
+      const EdgeInsets.fromLTRB(22, 22, 22, 0),
+      contentPadding:
+      const EdgeInsets.fromLTRB(22, 16, 22, 0),
+      actionsPadding:
+      const EdgeInsets.fromLTRB(18, 6, 18, 16),
+
       title: Row(
         children: [
           Container(
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(13),
+              color:
+              colors.primary.withValues(alpha: 0.09),
+              borderRadius:
+              BorderRadius.circular(13),
             ),
             child: Icon(
               Icons.menu_book_rounded,
@@ -2054,16 +2207,21 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
           const Expanded(
             child: Text(
               'إضافة حصة',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
       ),
+
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment:
+            CrossAxisAlignment.stretch,
             children: [
               Container(
                 padding: const EdgeInsets.all(14),
@@ -2072,13 +2230,17 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                     begin: Alignment.topRight,
                     end: Alignment.bottomLeft,
                     colors: [
-                      colors.primary.withValues(alpha: 0.10),
-                      colors.primary.withValues(alpha: 0.035),
+                      colors.primary
+                          .withValues(alpha: 0.10),
+                      colors.primary
+                          .withValues(alpha: 0.035),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius:
+                  BorderRadius.circular(16),
                   border: Border.all(
-                    color: colors.primary.withValues(alpha: 0.12),
+                    color: colors.primary
+                        .withValues(alpha: 0.12),
                   ),
                 ),
                 child: Row(
@@ -2088,7 +2250,8 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                       height: 42,
                       decoration: BoxDecoration(
                         color: colors.primary,
-                        borderRadius: BorderRadius.circular(13),
+                        borderRadius:
+                        BorderRadius.circular(13),
                       ),
                       child: Icon(
                         Icons.groups_rounded,
@@ -2099,25 +2262,30 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                        CrossAxisAlignment.start,
                         children: [
                           Text(
                             widget.group.name,
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            overflow:
+                            TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w900,
+                              fontWeight:
+                              FontWeight.w900,
                             ),
                           ),
                           const SizedBox(height: 3),
                           Text(
                             '${_dayName(widget.group.weekday)} • إضافة حصة جديدة',
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            overflow:
+                            TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 9,
-                              color: colors.onSurfaceVariant,
+                              color: colors
+                                  .onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -2126,19 +2294,231 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 16),
+
+              // =========================
+              // المستوى
+              // =========================
+              Text(
+                'مستوى الحصة',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: colors.onSurface,
+                ),
+              ),
+
+              const SizedBox(height: 7),
+
+              if (_isLoadingLevels)
+                Container(
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: colors
+                        .surfaceContainerLowest,
+                    borderRadius:
+                    BorderRadius.circular(15),
+                    border: Border.all(
+                      color: colors.outlineVariant
+                          .withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child:
+                      CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ),
+                )
+              else if (_levels.isEmpty)
+                Container(
+                  padding:
+                  const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: colors.error
+                        .withValues(alpha: 0.06),
+                    borderRadius:
+                    BorderRadius.circular(15),
+                    border: Border.all(
+                      color: colors.error
+                          .withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 19,
+                        color: colors.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'لا يوجد مستويات حاليًا. أضف مستوى من شاشة الإعدادات أولًا.',
+                          textAlign:
+                          TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 9,
+                            height: 1.5,
+                            color: colors.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.primary
+                        .withValues(alpha: 0.05),
+                    borderRadius:
+                    BorderRadius.circular(16),
+                    border: Border.all(
+                      color: colors.primary
+                          .withValues(alpha: 0.10),
+                    ),
+                  ),
+                  child:
+                  DropdownButtonFormField<String>(
+                    initialValue:
+                    _selectedLevelId.isEmpty
+                        ? null
+                        : _selectedLevelId,
+                    isExpanded: true,
+                    decoration:
+                    const InputDecoration(
+                      prefixIcon: Icon(
+                        Icons.layers_rounded,
+                      ),
+                      border: InputBorder.none,
+                      hintText:
+                      'اختر مستوى الحصة',
+                    ),
+                    items: _levels.map((level) {
+                      return DropdownMenuItem<String>(
+                        value: level.id,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                level.name,
+                                textAlign:
+                                TextAlign.right,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight:
+                                  FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${level.monthlyFee.toStringAsFixed(0)} ج.م',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight:
+                                FontWeight.w800,
+                                color:
+                                colors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: _isSaving
+                        ? null
+                        : (value) {
+                      if (value == null) {
+                        return;
+                      }
+
+                      setState(() {
+                        _selectedLevelId =
+                            value;
+                      });
+                    },
+                    validator: (value) {
+                      if (value == null ||
+                          value.isEmpty) {
+                        return 'اختار مستوى الحصة';
+                      }
+
+                      return null;
+                    },
+                  ),
+                ),
+
+              if (selectedLevel != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.primary
+                        .withValues(alpha: 0.06),
+                    borderRadius:
+                    BorderRadius.circular(13),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.payments_outlined,
+                        size: 17,
+                        color: colors.primary,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          'مصاريف المستوى: ${selectedLevel.monthlyFee.toStringAsFixed(0)} ج.م شهريًا',
+                          textAlign:
+                          TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight:
+                            FontWeight.w800,
+                            color: colors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 16),
+
               Row(
                 children: [
                   Expanded(
                     child: AppTextField(
-                      controller: _timeController,
+                      controller:
+                      _timeController,
                       label: 'وقت البداية',
                       hintText: 'اختيار',
-                      prefixIcon: Icons.play_circle_outline_rounded,
+                      prefixIcon: Icons
+                          .play_circle_outline_rounded,
                       readOnly: true,
-                      onTap: _pickStartTime,
+                      onTap:
+                      _pickStartTime,
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
+                        if (value == null ||
+                            value.trim().isEmpty) {
                           return 'اختر البداية';
                         }
 
@@ -2149,14 +2529,18 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: AppTextField(
-                      controller: _endTimeController,
+                      controller:
+                      _endTimeController,
                       label: 'وقت النهاية',
                       hintText: 'اختيار',
-                      prefixIcon: Icons.stop_circle_outlined,
+                      prefixIcon: Icons
+                          .stop_circle_outlined,
                       readOnly: true,
-                      onTap: _pickEndTime,
+                      onTap:
+                      _pickEndTime,
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
+                        if (value == null ||
+                            value.trim().isEmpty) {
                           return 'اختر النهاية';
                         }
 
@@ -2166,32 +2550,43 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 14),
+
               AppTextField(
-                controller: _titleController,
+                controller:
+                _titleController,
                 label: 'عنوان الدرس',
                 hintText: 'مثال: الجبر',
-                textInputAction: TextInputAction.next,
-                prefixIcon: Icons.auto_stories_rounded,
+                textInputAction:
+                TextInputAction.next,
+                prefixIcon:
+                Icons.auto_stories_rounded,
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'اكتب عنوان الدرس';
                   }
 
                   return null;
                 },
               ),
+
               const SizedBox(height: 12),
 
-              // الصف الدراسي أصبح خاصًا بالحصة
               AppTextField(
-                controller: _gradeController,
+                controller:
+                _gradeController,
                 label: 'الصف الدراسي',
-                hintText: 'مثال: الصف الثالث الثانوي',
-                prefixIcon: Icons.school_outlined,
-                textInputAction: TextInputAction.done,
+                hintText:
+                'مثال: الصف الثالث الثانوي',
+                prefixIcon:
+                Icons.school_outlined,
+                textInputAction:
+                TextInputAction.done,
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
                     return 'اكتب الصف الدراسي';
                   }
 
@@ -2200,16 +2595,22 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
               ),
 
               const SizedBox(height: 12),
+
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                const EdgeInsets.symmetric(
                   horizontal: 11,
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: colors.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(12),
+                  color: colors
+                      .surfaceContainerLowest,
+                  borderRadius:
+                  BorderRadius.circular(12),
                   border: Border.all(
-                    color: colors.outlineVariant.withValues(alpha: 0.22),
+                    color: colors
+                        .outlineVariant
+                        .withValues(alpha: 0.22),
                   ),
                 ),
                 child: Row(
@@ -2223,11 +2624,13 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
                     Expanded(
                       child: Text(
                         'اضغط على وقت البداية أو النهاية لاستخدام Time Picker.',
-                        textAlign: TextAlign.right,
+                        textAlign:
+                        TextAlign.right,
                         style: TextStyle(
                           fontSize: 8,
                           height: 1.4,
-                          color: colors.onSurfaceVariant,
+                          color: colors
+                              .onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -2238,24 +2641,40 @@ class _GroupScheduleDialogState extends State<_GroupScheduleDialog> {
           ),
         ),
       ),
+
       actions: [
         TextButton(
-          onPressed: _isSaving ? null : () => Navigator.pop(context, false),
+          onPressed: _isSaving
+              ? null
+              : () =>
+              Navigator.pop(context, false),
           child: const Text('إلغاء'),
         ),
+
         FilledButton.icon(
-          onPressed: _isSaving ? null : _saveSchedule,
+          onPressed:
+          _isSaving || _isLoadingLevels
+              ? null
+              : _saveSchedule,
           icon: _isSaving
               ? const SizedBox(
-                  width: 17,
-                  height: 17,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Icon(Icons.check_rounded, size: 18),
-          label: Text(_isSaving ? 'جارٍ الحفظ...' : 'إضافة الحصة'),
+            width: 17,
+            height: 17,
+            child:
+            CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          )
+              : const Icon(
+            Icons.check_rounded,
+            size: 18,
+          ),
+          label: Text(
+            _isSaving
+                ? 'جارٍ الحفظ...'
+                : 'إضافة الحصة',
+          ),
         ),
       ],
     );

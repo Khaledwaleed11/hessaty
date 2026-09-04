@@ -1,397 +1,584 @@
 import 'package:flutter/material.dart';
 
-class SettingsScreen extends StatelessWidget {
-  static const String appVersion = '1.0.0';
+import 'package:hessaty/screens/level_screen.dart';
+import 'package:hessaty/screens/groups_screen.dart';
+import 'package:hessaty/screens/schedule_screen.dart';
 
+class SettingsScreen extends StatelessWidget {
   final VoidCallback onThemeToggle;
 
-  const SettingsScreen({super.key, required this.onThemeToggle});
+  const SettingsScreen({
+    super.key,
+    required this.onThemeToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
-    // اقرأ حالة الـ Theme الحقيقية من Flutter
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isDark =
+        theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
-      body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor:
+        theme.scaffoldBackgroundColor,
+
+        // =====================================================
+        // App Bar
+        // =====================================================
+
+        appBar: AppBar(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          backgroundColor:
+          theme.scaffoldBackgroundColor,
+          surfaceTintColor: Colors.transparent,
+          title: const Text(
+            'الإعدادات',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
+          ),
+          centerTitle: false,
+        ),
+
+        // =====================================================
+        // Body
+        // =====================================================
+
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              10,
+              20,
+              30,
+            ),
+            children: [
+
+              // =================================================
+              // Header
+              // =================================================
+
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  borderRadius:
+                  BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.primary
+                          .withValues(alpha: 0.16),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
                   children: [
-                    _buildHeader(colors),
 
-                    const SizedBox(height: 28),
-
-                    _buildSectionHeader(
-                      colors,
-                      title: 'التفضيلات',
-                      subtitle: 'خصص طريقة عمل تطبيق حصتي حسب احتياجك.',
+                    // Icon
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        color: colors.onPrimary
+                            .withValues(alpha: 0.15),
+                        borderRadius:
+                        BorderRadius.circular(18),
+                      ),
+                      child: Icon(
+                        Icons.school_rounded,
+                        color: colors.onPrimary,
+                        size: 30,
+                      ),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(width: 16),
 
-                    _buildThemeCard(context, colors, isDarkMode),
-
-                    const SizedBox(height: 26),
-
-                    _buildSectionHeader(
-                      colors,
-                      title: 'عن التطبيق',
-                      subtitle: 'معلومات وتفاصيل تطبيق حصتي.',
+                    // Text
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'حصتي',
+                            style: TextStyle(
+                              color:
+                              colors.onPrimary,
+                              fontSize: 21,
+                              fontWeight:
+                              FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            'إدارة التطبيق والإعدادات',
+                            style: TextStyle(
+                              color: colors.onPrimary
+                                  .withValues(
+                                alpha: 0.80,
+                              ),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-
-                    const SizedBox(height: 12),
-
-                    _buildInfoCard(
-                      colors,
-                      icon: Icons.info_outline_rounded,
-                      title: 'عن حصتي',
-                      subtitle:
-                          'إدارة الحصص والطلاب والمجموعات والحضور والغياب من مكان واحد.',
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    _buildInfoCard(
-                      colors,
-                      icon: Icons.verified_rounded,
-                      title: 'إصدار التطبيق',
-                      subtitle: 'الإصدار الحالي $appVersion',
-                      trailing: _buildVersionBadge(colors, appVersion),
-                    ),
-
-                    const SizedBox(height: 26),
-
-                    _buildFooter(colors),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 28),
+
+              // =================================================
+              // Appearance
+              // =================================================
+
+              _SectionTitle(
+                title: 'المظهر',
+                icon: Icons.palette_outlined,
+              ),
+
+              const SizedBox(height: 10),
+
+              _SettingCard(
+                icon: isDark
+                    ? Icons.dark_mode_rounded
+                    : Icons.light_mode_rounded,
+                title: 'الوضع الليلي',
+                subtitle: isDark
+                    ? 'الوضع الداكن مفعل'
+                    : 'الوضع الفاتح مفعل',
+                trailing: Switch.adaptive(
+                  value: isDark,
+                  onChanged: (_) {
+                    onThemeToggle();
+                  },
+                ),
+                onTap: onThemeToggle,
+              ),
+
+              const SizedBox(height: 26),
+
+              // =================================================
+              // Management
+              // =================================================
+
+              _SectionTitle(
+                title: 'إدارة التطبيق',
+                icon:
+                Icons.manage_accounts_outlined,
+              ),
+
+              const SizedBox(height: 10),
+
+              // =================================================
+              // Levels
+              // =================================================
+
+              _SettingCard(
+                icon: Icons.layers_rounded,
+                title: 'المستويات',
+                subtitle:
+                'إضافة وتعديل وحذف المستويات والمصاريف',
+                trailing: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 18,
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                      const LevelsScreen(),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              // =================================================
+              // Groups
+              // =================================================
+
+              _SettingCard(
+                icon: Icons.groups_rounded,
+                title: 'الجروبات',
+                subtitle:
+                'إدارة مجموعات الطلاب',
+                trailing: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 18,
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                      const GroupsScreen(),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              // =================================================
+              // Schedule
+              // =================================================
+
+              _SettingCard(
+                icon:
+                Icons.calendar_month_rounded,
+                title: 'الجدول الدراسي',
+                subtitle:
+                'إدارة مواعيد الحصص والجداول',
+                trailing: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 18,
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                      const ScheduleScreen(),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 26),
+
+              // =================================================
+              // About
+              // =================================================
+
+              _SectionTitle(
+                title: 'عن التطبيق',
+                icon: Icons.info_outline_rounded,
+              ),
+
+              const SizedBox(height: 10),
+
+              // About App
+              _SettingCard(
+                icon: Icons.school_rounded,
+                title: 'حصتي',
+                subtitle:
+                'مساعد المدرس لإدارة الطلاب والحصص',
+                trailing: const Icon(
+                  Icons.info_outline_rounded,
+                  size: 20,
+                ),
+                onTap: () {
+                  _showAboutDialog(context);
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              // Version
+              _SettingCard(
+                icon: Icons.code_rounded,
+                title: 'إصدار التطبيق',
+                subtitle: 'Version 1.0.0',
+                trailing:
+                const SizedBox.shrink(),
+                onTap: null,
+              ),
+
+              const SizedBox(height: 30),
+
+              // =================================================
+              // Footer
+              // =================================================
+
+              Center(
+                child: Text(
+                  'حصتي • لإدارة حصصك وطلابك بسهولة',
+                  style: TextStyle(
+                    color: theme
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withValues(
+                      alpha: 0.55,
+                    ),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(ColorScheme colors) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [
-            colors.primary,
-            Color.lerp(colors.primary, colors.primaryContainer, 0.58)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: colors.primary.withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+  // ===========================================================
+  // About Dialog
+  // ===========================================================
+
+  void _showAboutDialog(
+      BuildContext context,
+      ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final colors =
+            Theme.of(context).colorScheme;
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius:
+            BorderRadius.circular(24),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+          title: Row(
             children: [
+
               Container(
-                width: 56,
-                height: 56,
+                padding:
+                const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.10),
+                  color: colors.primary
+                      .withValues(
+                    alpha: 0.10,
                   ),
+                  borderRadius:
+                  BorderRadius.circular(14),
                 ),
-                child: const Icon(
-                  Icons.settings_rounded,
-                  color: Colors.white,
-                  size: 27,
+                child: Icon(
+                  Icons.school_rounded,
+                  color: colors.primary,
                 ),
               ),
 
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'حصتي',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'الإعدادات',
-                      style: TextStyle(
-                        fontSize: 25,
-                        height: 1.05,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+              const Text(
+                'عن حصتي',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 18),
-
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'تحكم في مظهر التطبيق وبعض الإعدادات الأساسية.',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      height: 1.4,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ),
-              ],
+          content: const Text(
+            'حصتي هو تطبيق يساعد المدرس على إدارة الطلاب '
+                'والجروبات والحصص والحضور والمصاريف والامتحانات '
+                'من مكان واحد بسهولة.',
+            style: TextStyle(
+              height: 1.7,
             ),
           ),
-        ],
-      ),
+
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text(
+                'حسنًا',
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
+}
 
-  Widget _buildSectionHeader(
-    ColorScheme colors, {
-    required String title,
-    required String subtitle,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+// =============================================================
+// Section Title
+// =============================================================
+
+class _SectionTitle
+    extends StatelessWidget {
+  final String title;
+  final IconData icon;
+
+  const _SectionTitle({
+    required this.title,
+    required this.icon,
+  });
+
+  @override
+  Widget build(
+      BuildContext context,
+      ) {
+    final colors =
+        Theme.of(context).colorScheme;
+
+    return Row(
       children: [
+
+        Icon(
+          icon,
+          size: 19,
+          color: colors.primary,
+        ),
+
+        const SizedBox(width: 8),
+
         Text(
           title,
           style: TextStyle(
             fontSize: 16,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.bold,
             color: colors.onSurface,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 10,
-            height: 1.35,
-            color: colors.onSurfaceVariant,
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _buildThemeCard(
-    BuildContext context,
-    ColorScheme colors,
-    bool isDarkMode,
-  ) {
-    final icon = isDarkMode
-        ? Icons.dark_mode_rounded
-        : Icons.light_mode_rounded;
+// =============================================================
+// Setting Card
+// =============================================================
 
-    final title = isDarkMode ? 'الوضع الليلي' : 'الوضع النهاري';
+class _SettingCard
+    extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
 
-    final subtitle = isDarkMode
-        ? 'الوضع الليلي مفعل حاليًا'
-        : 'الوضع النهاري مفعل حاليًا';
+  const _SettingCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    required this.onTap,
+  });
 
-    return _buildTile(
-      colors,
-      icon: icon,
-      title: title,
-      subtitle: subtitle,
-      trailing: Switch.adaptive(
-        value: isDarkMode,
-        onChanged: (_) {
-          onThemeToggle();
-        },
-      ),
-    );
-  }
+  @override
+  Widget build(
+      BuildContext context,
+      ) {
+    final theme =
+    Theme.of(context);
 
-  Widget _buildInfoCard(
-    ColorScheme colors, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    Widget? trailing,
-  }) {
-    return _buildTile(
-      colors,
-      icon: icon,
-      title: title,
-      subtitle: subtitle,
-      trailing: trailing,
-    );
-  }
+    final colors =
+        theme.colorScheme;
 
-  Widget _buildVersionBadge(ColorScheme colors, String version) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.primary.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.12)),
-      ),
-      child: Text(
-        version,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          color: colors.primary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTile(
-    ColorScheme colors, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    Widget? trailing,
-  }) {
     return Material(
       color: colors.surface,
-      borderRadius: BorderRadius.circular(21),
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(21),
-          border: Border.all(
-            color: colors.outlineVariant.withValues(alpha: 0.28),
+      borderRadius:
+      BorderRadius.circular(20),
+
+      child: InkWell(
+        onTap: onTap,
+        borderRadius:
+        BorderRadius.circular(20),
+
+        child: Container(
+          padding:
+          const EdgeInsets.all(16),
+
+          decoration: BoxDecoration(
+            borderRadius:
+            BorderRadius.circular(20),
+
+            border: Border.all(
+              color: colors.outline
+                  .withValues(
+                alpha: 0.10,
+              ),
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: colors.shadow.withValues(alpha: 0.025),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: colors.primary.withValues(alpha: 0.09),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Icon(icon, size: 22, color: colors.primary),
-            ),
 
-            const SizedBox(width: 13),
+          child: Row(
+            children: [
 
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      color: colors.onSurface,
-                    ),
+              // =================================================
+              // Icon
+              // =================================================
+
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primary
+                      .withValues(
+                    alpha: 0.10,
                   ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      height: 1.35,
-                      fontWeight: FontWeight.w500,
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                  borderRadius:
+                  BorderRadius.circular(15),
+                ),
+                child: Icon(
+                  icon,
+                  color: colors.primary,
+                  size: 23,
+                ),
               ),
-            ),
 
-            const SizedBox(width: 10),
+              const SizedBox(width: 14),
 
-            if (trailing != null) trailing,
-          ],
+              // =================================================
+              // Text
+              // =================================================
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight:
+                        FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow:
+                      TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withValues(
+                          alpha: 0.65,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // =================================================
+              // Trailing
+              // =================================================
+
+              if (trailing != null)
+                trailing!,
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildFooter(ColorScheme colors) {
-    return Column(
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: colors.primary.withValues(alpha: 0.08),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(Icons.school_rounded, size: 19, color: colors.primary),
-        ),
-
-        const SizedBox(height: 9),
-
-        Text(
-          'حصتي',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-            color: colors.onSurface,
-          ),
-        ),
-
-        const SizedBox(height: 3),
-
-        Text(
-          'إدارة الحصص بطريقة أبسط',
-          style: TextStyle(fontSize: 9, color: colors.onSurfaceVariant),
-        ),
-      ],
     );
   }
 }

@@ -589,29 +589,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        Material(
-          color: colors.surface,
-          borderRadius:
-          BorderRadius.circular(15),
-          child: InkWell(
-            onTap: () {},
-            borderRadius:
-            BorderRadius.circular(15),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                borderRadius:
-                BorderRadius.circular(15),
-                border: Border.all(
-                  color: colors
-                      .outlineVariant
-                      .withValues(alpha: 0.30),
-                ),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }

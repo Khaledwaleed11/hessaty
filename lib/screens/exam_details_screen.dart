@@ -18,7 +18,6 @@ class ExamDetailsScreen extends StatefulWidget {
     super.key,
     required this.exam,
   });
-
   @override
   State<ExamDetailsScreen> createState() => _ExamDetailsScreenState();
 }

@@ -13,10 +13,12 @@ Future<void> main() async {
   await Hive.openBox('groups');
   await Hive.openBox('students');
   await Hive.openBox('schedules');
+  await Hive.openBox('levels');
   await Hive.openBox('attendance');
   await Hive.openBox('settings');
   await Hive.openBox('exams');
   await Hive.openBox('exam_students');
+  await Hive.openBox('payments');
 
   final settingsBox = Hive.box('settings');
 

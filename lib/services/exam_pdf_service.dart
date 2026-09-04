@@ -366,8 +366,7 @@ class ExamPdfService {
                       style: pw.TextStyle(
                         font: regularFont,
                         fontSize: 9.5,
-                        color:
-                        PdfColor.fromInt(
+                        color: PdfColor.fromInt(
                           0xFFC7D2FE,
                         ),
                       ),
@@ -437,6 +436,14 @@ class ExamPdfService {
                   schedule.lessonTitle.isEmpty
                       ? '-'
                       : schedule.lessonTitle,
+                  regularFont,
+                  boldFont,
+                ),
+
+                // وقت الحصة
+                _heroInfoCell(
+                  'ميعاد الحصة',
+                  '${schedule.startTime} - ${schedule.endTime}',
                   regularFont,
                   boldFont,
                 ),
