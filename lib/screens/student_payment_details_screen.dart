@@ -368,20 +368,6 @@ class _StudentPaymentDetailsScreenState
     return count;
   }
 
-  int get _dueMonths {
-    final firstMonth =
-        _firstDueMonthForSelectedYear;
-
-    final lastMonth =
-        _lastDueMonthForSelectedYear;
-
-    if (firstMonth > 12 ||
-        lastMonth < firstMonth) {
-      return 0;
-    }
-
-    return lastMonth - firstMonth + 1;
-  }
 
   int get _unpaidMonths {
     int unpaid = 0;
@@ -1750,7 +1736,7 @@ class _StudentPaymentDetailsScreenState
           ),
 
           if (isPaid &&
-              payment?.paidAt != null) ...[
+              payment.paidAt != null) ...[
             const SizedBox(
               height: 10,
             ),
@@ -1760,7 +1746,7 @@ class _StudentPaymentDetailsScreenState
               Alignment.centerRight,
               child: Text(
                 'تم الدفع: '
-                    '${_formatDate(payment!.paidAt!)}',
+                    '${_formatDate(payment.paidAt!)}',
                 style: TextStyle(
                   fontSize: 11,
                   color: colors

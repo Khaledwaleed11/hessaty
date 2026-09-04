@@ -42,6 +42,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   int _selectedYear = DateTime.now().year;
 
   late final Box _paymentsBox;
+  late final Box _studentsBox;
 
   final List<String> _months = const [
     'يناير',
@@ -63,7 +64,23 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     super.initState();
 
     _paymentsBox = Hive.box('payments');
-    _paymentsBox.listenable().addListener(_onPaymentsChanged);
+    _studentsBox = Hive.box('students');
+
+    _paymentsBox.listenable().addListener(
+      _onPaymentsChanged,
+    );
+
+    _studentsBox.listenable().addListener(
+      _onStudentsChanged,
+    );
+
+    _loadData();
+  }
+
+  void _onStudentsChanged() {
+    if (!mounted) {
+      return;
+    }
 
     _loadData();
   }
@@ -80,6 +97,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   void dispose() {
     _paymentsBox.listenable().removeListener(
       _onPaymentsChanged,
+    );
+
+    _studentsBox.listenable().removeListener(
+      _onStudentsChanged,
     );
 
     super.dispose();
@@ -390,8 +411,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
       // لو كان فيه مبلغ محفوظ قبل كده نحتفظ بيه.
       // غير كده نستخدم سعر المستوى الحالي.
-      amount: existingPayment?.amount ??
-          level.monthlyFee,
+      amount: existingPayment != null &&
+          existingPayment.isPaid
+          ? existingPayment.amount
+          : level.monthlyFee,
 
       month: _selectedMonth,
       year: _selectedYear,

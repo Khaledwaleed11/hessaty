@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hessaty/screens/splash_screen.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
